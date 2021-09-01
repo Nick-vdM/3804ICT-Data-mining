@@ -36,3 +36,15 @@ Candidate datasets can be obtained from the online open data repository (such as
 ## Marking criteria:
 You will be marked out of 100 points. Marks will be allocated as indicated in the task section above. Marks will be awarded depending on the proportion of the task that is successfully completed and the quality of the solution.
 Please review the task thoroughly before you commence work on this assessment task. Ensure that you have addressed the relevant criteria when completing the assessment task.
+
+## NOTE: Working with Pickles
+The pickles in this project (.pickle files) are stored as compressed pickles. To load the data within, use the following:
+```python
+import bz2
+import pickle
+
+def decompress_pickle(filename):
+    bz2_file = bz2.BZ2File(filename, "r")
+    data = pickle.load(bz2_file)
+    return data
+```
