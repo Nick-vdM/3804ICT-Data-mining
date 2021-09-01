@@ -1,16 +1,33 @@
+import csv
 import pandas as pd
+import numpy as np
 import pickle
 import bz2
 
-user_rating_filename = "../data/ratings.csv"
-links_filename = "../data/links.csv"
-movies_filename = "../data/IMDb movies.csv"
+user_rating_filename = "../data/clean_ratings.csv"
+links_filename = "../data/clean_links.csv"
+movies_filename = "../data/clean_IMDb movies.csv"
+
+input_files = ["../data/ratings.csv", "../data/links.csv", "../data/IMDb movies.csv"]
+
+user_rating_clean_filename = "../data/clean_ratings.csv"
 
 user_rating_output_filename = "../data/organised_ratings.csv"
 movies_output_filename = "../data/organised_movies.csv"
 
 user_rating_pickle_filename = "../pickles/organised_ratings.pickle"
 movies_pickle_filename = "../pickles/organised_movies.pickle"
+
+
+def remove_trailing_spaces():
+    for filename in input_files:
+        with open(filename, 'r', encoding='utf8', newline='') as csv_input:
+            reader = csv.reader(csv_input)
+            with open(filename[:8] + "clean_" + filename[8:], 'w', encoding='utf8', newline='') as csv_output:
+                writer = csv.writer(csv_output)
+                for row in reader:
+                    row = [col.strip() for col in row]
+                    writer.writerow(row)
 
 
 def read_in_user_rating_csv():
@@ -80,7 +97,16 @@ def fix_strings_in_int_fields(string_input):
         return int(string_input)
 
 
+def convert_float_to_int_fields(float_val):
+    if np.isnan(float_val):
+        return -1
+    else:
+        return int(float_val)
+
+
 if __name__ == "__main__":
+    remove_trailing_spaces()
+
     user_rating_df = read_in_user_rating_csv()
     print(user_rating_df.head(10))
 
@@ -110,6 +136,18 @@ if __name__ == "__main__":
     movie_years = movies_df["year"].apply(fix_strings_in_int_fields)
     movies_df = movies_df.drop("year", axis=1)
     movies_df = movies_df.assign(year=movie_years)
+
+    movies_metascore = movies_df["metascore"].apply(convert_float_to_int_fields)
+    movies_df = movies_df.drop("metascore", axis=1)
+    movies_df = movies_df.assign(metascore=movies_metascore)
+
+    movies_reviews_from_users = movies_df["reviews_from_users"].apply(convert_float_to_int_fields)
+    movies_df = movies_df.drop("reviews_from_users", axis=1)
+    movies_df = movies_df.assign(reviews_from_users=movies_reviews_from_users)
+
+    movies_reviews_from_critics = movies_df["reviews_from_critics"].apply(convert_float_to_int_fields)
+    movies_df = movies_df.drop("reviews_from_critics", axis=1)
+    movies_df = movies_df.assign(reviews_from_critics=movies_reviews_from_critics)
 
     print(movies_df.head(10))
     movies_df.to_csv(movies_output_filename)
