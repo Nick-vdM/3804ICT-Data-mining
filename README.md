@@ -38,31 +38,5 @@ You will be marked out of 100 points. Marks will be allocated as indicated in th
 Please review the task thoroughly before you commence work on this assessment task. Ensure that you have addressed the relevant criteria when completing the assessment task.
 
 ## NOTE: Working with Pickles
-The pickles in this project (.pickle files) are stored as compressed pickles. To load the data within, use the following:
-```python
-"""
-These functions are from https://github.com/Nick-vdM/SEEKAnalysis/blob/main/my_tools/useful_functions.py
-"""
-import compress_pickle
-import os
-
-def save_to_pickle(item_to_save, location):
-    """Location must end with .type - i.e. lzma for this project"""
-    try:
-        f = open(location, 'wb')
-    except FileNotFoundError:
-        # The specified path probably doesn't exist
-        # Use mkdir and try again.
-        print("WARNING: Pickle path does not exist. Creating... If this message persists, something is wrong")
-        os.makedirs(os.path.dirname(location))
-
-        save_to_pickle(item_to_save, location)
-        return
-    f.close()
-    compress_pickle.dump(item_to_save, location)
-
-
-def load_from_pickle(location):
-    item = compress_pickle.load(location)
-    return item
-```
+The pickles in this project (.pickle.lz4 files) are stored 
+in compressed pickles. The easiest way to use them are `./proposal/pickle_manager.py`
