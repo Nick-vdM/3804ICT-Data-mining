@@ -14263,17 +14263,21 @@ a.anchor-link {
 that integration would be done before the clean up because those data structures would give access to an easier
 way to do most of the cleaning functions</p>
 <ol>
-<li>Integrations
- a. Trailing spaces need to be removed for merging
- b. Merges the user ratings to have an imdbId column so that the movies are easier to identify
- c. Merges the several csv documents into a single dataframe so operations are simpler
- d. Exports as lz4 because it has a fast compression algorithm</li>
-<li>Cleanup
- a. Removes unnecessary columns - budget, use_gross_income, worldwide_gross_income, metascore. These are all missing
-too many of their rows to be worthwhile
- b. Remove lower outliers from reviews_from_users, reviews_from_critics, voters, and remove all the outliers
-from duration.
- c. Removing movies that don't exist - a user reviews a movie that has an id that doesn't exist</li>
+<li>Integrations<ul>
+<li>Trailing spaces need to be removed for merging</li>
+<li>Merges the user ratings to have an imdbId column so that the movies are easier to identify</li>
+<li>Merges the several csv documents into a single dataframe so operations are simpler</li>
+<li>Exports as lz4 because it has a fast compression algorithm</li>
+</ul>
+</li>
+<li>Cleanup<ul>
+<li>Removes unnecessary columns - budget, use_gross_income, worldwide_gross_income, metascore. These are all missing
+too many of their rows to be worthwhile</li>
+<li>Remove lower outliers from reviews_from_users, reviews_from_critics, voters, and remove all the outliers
+from duration.</li>
+<li>Removing movies that don't exist - a user reviews a movie that has an id that doesn't exist</li>
+</ul>
+</li>
 </ol>
 
 </div>
