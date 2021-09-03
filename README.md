@@ -40,11 +40,29 @@ Please review the task thoroughly before you commence work on this assessment ta
 ## NOTE: Working with Pickles
 The pickles in this project (.pickle files) are stored as compressed pickles. To load the data within, use the following:
 ```python
-import bz2
-import pickle
+"""
+These functions are from https://github.com/Nick-vdM/SEEKAnalysis/blob/main/my_tools/useful_functions.py
+"""
+import compress_pickle
+import os
 
-def decompress_pickle(filename):
-    bz2_file = bz2.BZ2File(filename, "r")
-    data = pickle.load(bz2_file)
-    return data
+def save_to_pickle(item_to_save, location):
+    """Location must end with .type - i.e. lzma for this project"""
+    try:
+        f = open(location, 'wb')
+    except FileNotFoundError:
+        # The specified path probably doesn't exist
+        # Use mkdir and try again.
+        print("WARNING: Pickle path does not exist. Creating... If this message persists, something is wrong")
+        os.makedirs(os.path.dirname(location))
+
+        save_to_pickle(item_to_save, location)
+        return
+    f.close()
+    compress_pickle.dump(item_to_save, location)
+
+
+def load_from_pickle(location):
+    item = compress_pickle.load(location)
+    return item
 ```
