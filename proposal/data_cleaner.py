@@ -31,6 +31,15 @@ class data_cleaner:
         self.remove_unnecessary_columns()
         print("\tafter", self.movie_df.columns)
 
+        print("Removing lower outliers for reviews")
+        print("Length of table before dropping lower outliers", len(self.movie_df))
+        self.movie_df = self.remove_lower_outliers(self.movie_df, 'reviews_from_users')
+        self.movie_df = self.remove_lower_outliers(self.movie_df, 'reviews_from_critics')
+        self.movie_df = self.remove_lower_outliers(self.movie_df, 'votes')
+        self.movie_df = self.remove_outliers(self.movie_df, 'duration')
+
+        print("Length of table after dropping lower outliers", len(self.movie_df))
+
         print("Removing movies that don't exist")
         # Need to do it both ways, quite an expensive operation
         print("\tSizes before: Movies", len(self.movie_df), "Ratings:", len(self.user_df))
@@ -51,16 +60,9 @@ class data_cleaner:
         del self.movie_df['usa_gross_income']
         del self.movie_df['worldwide_gross_income']
         del self.movie_df['metascore']
-        print("Removing lower outliers for reviews")
-        print("Length of table before dropping lower outliers", len(self.movie_df))
-        self.movie_df = self.remove_lower_outliers(self.movie_df, 'reviews_from_users')
-        self.movie_df = self.remove_lower_outliers(self.movie_df, 'reviews_from_critics')
-        self.movie_df = self.remove_lower_outliers(self.movie_df, 'votes')
-        self.movie_df = self.remove_outliers(self.movie_df, 'duration')
 
-        print("Length of table after dropping lower outliers", len(self.movie_df))
-
-    def remove_lower_outliers(self, df, column):
+    @staticmethod
+    def remove_lower_outliers(df, column):
         Q1 = df[column].quantile(0.25)
         Q3 = df[column].quantile(0.75)
         interquartile_range = Q3 - Q1
