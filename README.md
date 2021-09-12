@@ -1,4 +1,4 @@
-# Description:
+# Part 1
 In Part 1 of this assessment item, you need to form a group (minimum of TWO students and a maximum FOUR students) and co-create:
 
 * a one-page project proposal, and
@@ -37,6 +37,32 @@ Candidate datasets can be obtained from the online open data repository (such as
 You will be marked out of 100 points. Marks will be allocated as indicated in the task section above. Marks will be awarded depending on the proportion of the task that is successfully completed and the quality of the solution.
 Please review the task thoroughly before you commence work on this assessment task. Ensure that you have addressed the relevant criteria when completing the assessment task.
 
-## NOTE: Working with Pickles
-The pickles in this project (.pickle.lz4 files) are stored 
-in compressed pickles. The easiest way to use them are `./proposal/pickle_manager.py`
+# Part 2
+In Part 2 of this assessment item, in your group, you need to write-up a final project report, which comprehensively describes your project.
+## Task:
+You should include the following sections in your submission:
+
+1. **Introduction.** You should briefly introduce your targeted problem and motivation. (10 points)
+2. **Solution.** You should include your investigations on the existing methods and your specific implementations. The investigation part should report:
+        a. At least TWO popular tools per algorithm for your proposed problem on different platforms, e.g.,the libraries for association rule mining in Python and Weka. Core functions and codes should be included. (20 points)
+        b. You need to use a specific programming language, such as C/C++, Java, or Python, to implement the algorithm, rather than calling functions in the existing toolkits. Core functions and codes should be included. (30 points)
+3. **Key results and metrics of your algorithms.** You need to provide the experimental results of the implemented algorithms on the dataset you have chosen in Part 1. The comparison between your own implemented algorithm, and those two existing toolkits must be included. You can use tables and charts to report and compare the results. (20 points)
+4. **Summary.** You should summarize this project and report what has worked, what hasn’t, what has surprised you and your analysis. (10 points)
+5. **References.** All necessary materials you have investigated or used should be cited in the References in a consistent format. (5 points)
+
+**Individually,** you must add one paragraph at the end, after the References, to highlight what you have contributed to the full report. (5 points)
+
+All other parts should be the same among group members.
+  
+Also, you should provide all the source code for the implementation as an appendix.
+
+Notes:
+
+* You can use Weka or the existing toolkits to complete the final report, but you won’t be able to obtain any of the 30 marks allocated to point 2b (as indicated in the task section above).
+* There is no page limit for this final report.
+* The report should be signed by all group members.
+
+## Marking criteria:
+You will be marked out of 100 points. Marks will be allocated as indicated in the task section above. Marks will be awarded depending on the proportion of the task that is successfully completed and the quality of the solution.
+
+Please review the task thoroughly before you commence work on this assessment task. Ensure that you have addressed the relevant criteria when completing the assessment task.
