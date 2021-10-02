@@ -6,7 +6,9 @@ import random
 
 def slides_dbscan(similarity_matrix, radius: float, minimum_points: int):
     """
-
+    Does DBSCAN (Density Based Clustering of Applications with Noise)
+    Time: O(n^2)
+    Space: O(n^2) (pre-existing in similarity matrix)
     :param similarity_matrix: A lookup for distances. Should be able
     to call similarity_matrix[a][b] to be able to find the distance
     between a and b
@@ -34,6 +36,7 @@ def slides_dbscan(similarity_matrix, radius: float, minimum_points: int):
         # If the density is too low then its just noise
         if len(neighbourhood) < minimum_points:
             noise.append(point)
+            unclustered.add(point)
             continue
 
         for potential_point in neighbourhood:
