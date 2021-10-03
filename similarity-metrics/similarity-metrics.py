@@ -1,6 +1,7 @@
 import numpy as np
 import pyspark
 from pyspark import SparkContext, SparkConf, SQLContext
+from pyspark.ml.linalg import Vectors, VectorUDT
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, ArrayType
 from pyspark.sql.functions import udf
 
@@ -51,7 +52,10 @@ def embed_vector(df, to_embed, embedded_column):
     :return:
     """
     setup = VectorEmbedder(df.select(to_embed).collect(), to_embed)
-    generated_embedded_vector_udf = udf(lambda x: setup.generate_embedded_vector(x), ArrayType(IntegerType()))
+    generated_embedded_vector_udf = udf(
+        lambda x: Vectors.dense(setup.generate_embedded_vector(x)),
+        VectorUDT()
+    )
     return df.withColumn(embedded_column, generated_embedded_vector_udf(to_embed))
 
 
@@ -223,6 +227,10 @@ if __name__ == "__main__":
 
     # ================= clean out dataset =================
     small_df = drop_useless_columns(movie_df)
+
+    print(small_df.rdd.collect())
+    print("Printed rdd")
+    exit(1)
 
     small_df.show()
 
