@@ -25,3 +25,6 @@ def load_pickle(location):
     # it's here just for consistency
     item = compress_pickle.load(location)
     return item
+
+def move_to_root_if_parent_is(path):
+    pass

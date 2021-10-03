@@ -1,14 +1,19 @@
+import os
+
 import numpy as np
 import pyspark
 from pyspark import SparkContext, SparkConf, SQLContext
-from pyspark.sql.types import StructType,StructField, StringType, IntegerType, FloatType, ArrayType
-from pyspark.sql.functions import udf
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, ArrayType
+from pyspark.sql.functions import udf, array_union, concat
+
+from useful_tools import pickle_manager
 
 
 class VectorSetup:
     """
     Sets up vector for a specific feature. Pass feature column for whole dataset to constructor.
     """
+
     def __init__(self, attr_col, attr_col_name):
         self.col_name = attr_col_name
         self.class_dict = {}
@@ -74,12 +79,12 @@ class BasicSimilarity:
     def generate_movie_similarity(self, df):
         """
         Generates embedded vectors for the actor and genres,
-        appends them to one another and computes cosine similarity
+        appends them to one another, computes cosine similarity
+        and saves the matrix
         :return:
         """
 
         gower_distances = sorted(df.rdd.map(self.gower_distance).collect())
-
 
     def generate_user_similarity(self):
         """
@@ -90,19 +95,18 @@ class BasicSimilarity:
         pass
 
 
-from useful_tools import pickle_manager
-
-
 # Tester code
 if __name__ == "__main__":
     movie_df = pickle_manager.load_pickle("../pickles/organised_movies.pickle.lz4")
 
     conf = SparkConf()
     conf.set("spark.driver.memory", "10g")
+    conf.set("spark.driver.maxResultSize", "0")
     conf.set("spark.cores.max", "4")
     conf.set("spark.executor.heartbeatInterval", "3600")
 
     sc = SparkContext.getOrCreate(conf)
+    sc.setLogLevel('ERROR')
 
     spark = SQLContext(sc)
 
@@ -134,8 +138,20 @@ if __name__ == "__main__":
     movie_df = spark.createDataFrame(movie_df, schema=schema)
 
     genre_setup = VectorSetup(movie_df.select("genre").collect(), "genre")
-    test_udf = udf(lambda x: genre_setup.compute_vector(x), ArrayType(IntegerType()))
-    movie_df = movie_df.withColumn("genre_fixed", test_udf("genre"))
-    movie_df.show(10)
+    compute_vector_udf = udf(lambda x: genre_setup.compute_vector(x), ArrayType(IntegerType()))
+    movie_df = movie_df.withColumn("genre_vector", compute_vector_udf("genre"))
 
+    actor_setup = VectorSetup(movie_df.select("actors").collect(), "actors")
+    compute_vector_udf = udf(lambda x: actor_setup.compute_vector(x), ArrayType(IntegerType()))
+    movie_df = movie_df.withColumn("actor_vector", compute_vector_udf("actors"))
+
+    movie_df.show()
+
+    sc.setLogLevel('INFO')
+    embedded_vectors = movie_df.select(
+        concat(movie_df['genre_vector'], movie_df['actor_vector']).alias('feature')
+    )
+
+    embedded_vectors.show()
+    # TODO: Convert to sparse or dense vectors for storage? Probably not needed
     # TODO: Can convert string to vector -> just need to test similarity finding now
