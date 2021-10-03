@@ -90,7 +90,7 @@ class SimilarityRowGenerator:
         """
         sum_sj = 0
         for col in df_row.columns:
-            if type(df_row[col]) == np.ndarray:
+            if type(df_row[col]) == ArrayType(IntegerType()):
                 # Embedded vector - Need to go through and generate NTT/NNEQ/NFF
                 # See article
                 ntt = 0
@@ -117,9 +117,22 @@ class SimilarityRowGenerator:
         and saves the matrix
         :return:
         """
+        # TODO: BROKEN
+        df.show()
+        df.printSchema()
+        print("generating rdd")
+        rdd = df.rdd
+        print("Trying to print collect")
+        print("The rdd is", rdd.count(), "long")
+        print(rdd.collect())
+        print("mapping rdd")
+        rdd2 = rdd.map(lambda x: (x, 1))
+        print("trying to print rdd")
+        for element in rdd2.collect():
+            print(element)
 
-        gower_distances = df.rdd.map(self.calculate_gower_distance).collect()
-        return gower_distances
+        gower_distances = rdd.map(self.calculate_gower_distance)
+        gower_distances.collect()
 
     def generate_user_similarity(self):
         """
@@ -182,7 +195,8 @@ def drop_useless_columns(df):
 if __name__ == "__main__":
     # ================= init spark =================
     conf = SparkConf()
-    conf.set("spark.driver.memory", "10g")
+    conf.set("spark.driver.memory", "16g")
+    conf.set("spark.executor.memory", "8g")
     conf.set("spark.driver.maxResultSize", "0")
     conf.set("spark.cores.max", "4")
     conf.set("spark.executor.heartbeatInterval", "3600")
@@ -211,7 +225,15 @@ if __name__ == "__main__":
     small_df = drop_useless_columns(movie_df)
 
     small_df.show()
-    # ================= build similarity matrix and save =================
 
+    # TODO: BROKEN
+    print("generating rdd")
+
+    rdd = small_df.rdd
+    print("Trying to print collect")
+    print("The rdd is", rdd.count(), "long")
+    print(rdd.collect())
+    # ================= build similarity matrix and save =================
     sim = SimilarityRowGenerator(small_df[0], small_df)
+    sim.generate_movie_similarity(small_df)
     # TODO: Merge rows into a single similarity matrix which has [a][b] operators
