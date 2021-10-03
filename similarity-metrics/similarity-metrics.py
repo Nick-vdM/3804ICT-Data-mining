@@ -1,20 +1,23 @@
-import os
-
 import numpy as np
 import pyspark
 from pyspark import SparkContext, SparkConf, SQLContext
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, ArrayType
-from pyspark.sql.functions import udf, array_union, concat
+from pyspark.sql.functions import udf
 
 from useful_tools import pickle_manager
 
 
-class VectorSetup:
+class VectorEmbedder:
     """
-    Sets up vector for a specific feature. Pass feature column for whole dataset to constructor.
+    Functor. Embeds a given column of a pyspark dataframe
     """
 
     def __init__(self, attr_col, attr_col_name):
+        """
+        First step is to generate a map of the string to the key of it
+        :param attr_col: The column to use
+        :param attr_col_name: The name of the column
+        """
         self.col_name = attr_col_name
         self.class_dict = {}
         idx = 0
@@ -28,8 +31,10 @@ class VectorSetup:
 
         self.length = idx
 
-    def compute_vector(self, value_string):
-        """Run against all rows in dataframe (using map)."""
+    def generate_embedded_vector(self, value_string):
+        """
+        Generates an embedded vector for the given string
+        """
         vector = [0] * self.length
         for value in value_string.split(sep=", "):
             vector[self.class_dict[value]] = 1
@@ -37,14 +42,16 @@ class VectorSetup:
         return vector
 
 
-class BasicSimilarity:
+class SimilarityRowGenerator:
     """
-    Very fast and lazy approach to generating similarity matrices
-    while using pyspark. Depending on the time available, may not
-    be the final implementation of similarity.
+    Generates a single similarity row
     """
 
     def __init__(self, subject_movie, df: pyspark.sql.DataFrame):
+        """
+        :param subject_movie: The movie to base the row off of
+        :param df: The entire dataframe, must contain subject_movie as a column
+        """
         self.subject_movie = subject_movie
 
         self.ranges = {}
@@ -58,17 +65,25 @@ class BasicSimilarity:
 
         # self.sim_matrix = np.zeros((df.count(), df.count()), dtype=np.float16)
 
-    def gower_distance(self, df_row: pyspark.sql.Row):
-        # https://medium.com/analytics-vidhya/gowers-distance-899f9c4bd553
+    def calculate_gower_distance(self, df_row: pyspark.sql.Row):
+        """
+        Due to how our columns have a different impact on the similarity
+        between movies, we need to account for a different weight between each
+        one. See https://medium.com/analytics-vidhya/gowers-distance-899f9c4bd553
+        :param df_row: The row to use
+        :example
+        df.rdd.map(self.calculate_gower_distance)
+        :return:
+        """
         sum_sj = 0
         for col in df_row.columns:
             if type(df_row[col]) == np.ndarray:
-                # Categorical
+                # Embedded vector - Need to go through and generate NTT/NNEQ/NFF
+                # See article
                 ntt = 0
                 nneq = 0
                 nff = 0
                 for j in range(df_row[col]):
-                    # Iterate through array and get DiceDistance
                     if df_row[col][j] and self.subject_movie[col][j]:
                         ntt += 1
                     elif df_row[col][j] != self.subject_movie[col][j]:
@@ -90,7 +105,7 @@ class BasicSimilarity:
         :return:
         """
 
-        gower_distances = df.rdd.map(self.gower_distance).collect()
+        gower_distances = df.rdd.map(self.calculate_gower_distance).collect()
         return gower_distances
 
     def generate_user_similarity(self):
@@ -102,22 +117,8 @@ class BasicSimilarity:
         pass
 
 
-# Tester code
-if __name__ == "__main__":
-    movie_df = pickle_manager.load_pickle("../pickles/organised_movies.pickle.lz4")
-
-    conf = SparkConf()
-    conf.set("spark.driver.memory", "10g")
-    conf.set("spark.driver.maxResultSize", "0")
-    conf.set("spark.cores.max", "4")
-    conf.set("spark.executor.heartbeatInterval", "3600")
-
-    sc = SparkContext.getOrCreate(conf)
-    sc.setLogLevel('ERROR')
-
-    spark = SQLContext(sc)
-
-    schema = StructType([
+def generate_structtype():
+    return StructType([
         StructField("imdbId", StringType(), False),
         StructField("title", StringType(), True),
         StructField("original_title", StringType(), True),
@@ -142,41 +143,58 @@ if __name__ == "__main__":
         StructField("reviews_from_critics", IntegerType(), True)
     ])
 
+
+def drop_useless_columns(df):
+    df = df.drop("imdbId") \
+        .drop("title") \
+        .drop("original_title") \
+        .drop("date_published") \
+        .drop("genre") \
+        .drop("country") \
+        .drop("language") \
+        .drop("director") \
+        .drop("writer") \
+        .drop("production_company") \
+        .drop("actors") \
+        .drop("description") \
+        .drop("usa_gross_income") \
+        .drop("worldwide_gross_income") \
+        .drop("metascore") \
+        .drop("reviews_from_users") \
+        .drop("reviews_from_critics")
+    return df
+
+
+# Tester code
+if __name__ == "__main__":
+    movie_df = pickle_manager.load_pickle("../pickles/organised_movies.pickle.lz4")
+
+    conf = SparkConf()
+    conf.set("spark.driver.memory", "10g")
+    conf.set("spark.driver.maxResultSize", "0")
+    conf.set("spark.cores.max", "4")
+    conf.set("spark.executor.heartbeatInterval", "3600")
+
+    sc = SparkContext.getOrCreate(conf)
+    sc.setLogLevel('ERROR')
+
+    spark = SQLContext(sc)
+
+    schema = generate_structtype()
+
     movie_df = spark.createDataFrame(movie_df, schema=schema)
 
-    genre_setup = VectorSetup(movie_df.select("genre").collect(), "genre")
-    compute_vector_udf = udf(lambda x: genre_setup.compute_vector(x), ArrayType(IntegerType()))
+    genre_setup = VectorEmbedder(movie_df.select("genre").collect(), "genre")
+    compute_vector_udf = udf(lambda x: genre_setup.generate_embedded_vector(x), ArrayType(IntegerType()))
     movie_df = movie_df.withColumn("genre_vector", compute_vector_udf("genre"))
 
-    actor_setup = VectorSetup(movie_df.select("actors").collect(), "actors")
-    compute_vector_udf = udf(lambda x: actor_setup.compute_vector(x), ArrayType(IntegerType()))
+    actor_setup = VectorEmbedder(movie_df.select("actors").collect(), "actors")
+    compute_vector_udf = udf(lambda x: actor_setup.generate_embedded_vector(x), ArrayType(IntegerType()))
     movie_df = movie_df.withColumn("actor_vector", compute_vector_udf("actors"))
 
-    small_df = movie_df.drop("imdbId")
-    small_df = small_df.drop("title")
-    small_df = small_df.drop("original_title")
-    small_df = small_df.drop("date_published")
-    small_df = small_df.drop("genre")
-    small_df = small_df.drop("country")
-    small_df = small_df.drop("language")
-    small_df = small_df.drop("director")
-    small_df = small_df.drop("writer")
-    small_df = small_df.drop("production_company")
-    small_df = small_df.drop("actors")
-    small_df = small_df.drop("description")
-    small_df = small_df.drop("usa_gross_income")
-    small_df = small_df.drop("worldwide_gross_income")
-    small_df = small_df.drop("metascore")
-    small_df = small_df.drop("reviews_from_users")
-    small_df = small_df.drop("reviews_from_critics")
+    small_df = drop_useless_columns(movie_df)
 
     small_df.show()
 
-    sim = BasicSimilarity(small_df[0], small_df)
-
-    print(sim.generate_movie_similarity(movie_df))
-
-
-
-    # TODO: Convert to sparse or dense vectors for storage? Probably not needed
-    # TODO: Can convert string to vector -> just need to test similarity finding now
+    sim = SimilarityRowGenerator(small_df[0], small_df)
+    # TODO: Merge rows into a single similarity matrix which has [a][b] operators
