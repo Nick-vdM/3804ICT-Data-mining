@@ -44,13 +44,19 @@ class BasicSimilarity:
     be the final implementation of similarity.
     """
 
-    def __init__(self, spark: SQLContext, subject_movie, df: pyspark.sql.DataFrame):
-        self.spark: SQLContext = spark
+    def __init__(self, subject_movie, df: pyspark.sql.DataFrame):
         self.subject_movie = subject_movie
 
         self.ranges = {}
         for col in df.columns:
-            self.ranges[col] = df.agg({col: "np.ptp"}).collect()
+            if df.select(col).dtypes[0][0] == 'int':
+                max = df.agg({col: "max"}).collect()[0][0]
+                min = df.agg({col: "min"}).collect()[0][0]
+                self.ranges[col] = max - min
+            else:
+                self.ranges[col] = 0
+
+        # self.sim_matrix = np.zeros((df.count(), df.count()), dtype=np.float16)
 
     def gower_distance(self, df_row: pyspark.sql.Row):
         # https://medium.com/analytics-vidhya/gowers-distance-899f9c4bd553
@@ -84,7 +90,8 @@ class BasicSimilarity:
         :return:
         """
 
-        gower_distances = sorted(df.rdd.map(self.gower_distance).collect())
+        gower_distances = df.rdd.map(self.gower_distance).collect()
+        return gower_distances
 
     def generate_user_similarity(self):
         """
@@ -145,13 +152,31 @@ if __name__ == "__main__":
     compute_vector_udf = udf(lambda x: actor_setup.compute_vector(x), ArrayType(IntegerType()))
     movie_df = movie_df.withColumn("actor_vector", compute_vector_udf("actors"))
 
-    movie_df.show()
+    small_df = movie_df.drop("imdbId")
+    small_df = small_df.drop("title")
+    small_df = small_df.drop("original_title")
+    small_df = small_df.drop("date_published")
+    small_df = small_df.drop("genre")
+    small_df = small_df.drop("country")
+    small_df = small_df.drop("language")
+    small_df = small_df.drop("director")
+    small_df = small_df.drop("writer")
+    small_df = small_df.drop("production_company")
+    small_df = small_df.drop("actors")
+    small_df = small_df.drop("description")
+    small_df = small_df.drop("usa_gross_income")
+    small_df = small_df.drop("worldwide_gross_income")
+    small_df = small_df.drop("metascore")
+    small_df = small_df.drop("reviews_from_users")
+    small_df = small_df.drop("reviews_from_critics")
 
-    sc.setLogLevel('INFO')
-    embedded_vectors = movie_df.select(
-        concat(movie_df['genre_vector'], movie_df['actor_vector']).alias('feature')
-    )
+    small_df.show()
 
-    embedded_vectors.show()
+    sim = BasicSimilarity(small_df[0], small_df)
+
+    print(sim.generate_movie_similarity(movie_df))
+
+
+
     # TODO: Convert to sparse or dense vectors for storage? Probably not needed
     # TODO: Can convert string to vector -> just need to test similarity finding now
