@@ -1,12 +1,14 @@
 import numpy as np
+import pandas as pd
 import pyspark
 from pyspark import SparkContext, SparkConf, SQLContext
-from pyspark.ml.linalg import Vectors, VectorUDT
+from pyspark.ml.linalg import Vectors, VectorUDT, SparseVector
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, ArrayType
 from pyspark.sql.functions import udf
 
 from useful_tools import pickle_manager
 
+test = 0
 
 class VectorEmbedder:
     """
@@ -66,6 +68,36 @@ def embed_vector(df, to_embed, embedded_column):
     return df.withColumn(embedded_column, generated_embedded_vector_udf(to_embed))
 
 
+def calculate_gower_distance(row, row2, ranges):
+    sum_sj = 0
+    for col in range(len(row)):
+        if type(row[col]) == SparseVector:
+            # Embedded vector - Need to go through and generate NTT/NNEQ/NFF
+            # See article
+            ntt = 0
+            nneq = 0
+            nff = 0
+            for j in range(len(row[col])):
+                if row[col][j] and row2[col][j]:
+                    ntt += 1
+                elif row[col][j] != row2[col][j]:
+                    nneq += 1
+                else:
+                    nff += 1
+            sum_sj += nneq / (ntt + (nneq + ntt))
+        else:
+            # Numerical
+            sum_sj += 1 - (np.abs(row[col] - row2[col]) / ranges[col])
+
+    return 1 - (sum_sj / len(row))
+
+class GowerFunctor:
+    def __init__(self, row, ranges):
+        self.row = row
+        self.ranges = ranges
+
+
+
 class SimilarityRowGenerator:
     """
     Generates a single similarity row
@@ -79,47 +111,17 @@ class SimilarityRowGenerator:
         self.subject_movie = subject_movie
 
         self.ranges = {}
+        idx = 0
         for col in df.columns:
-            if df.select(col).dtypes[0][0] == 'int':
+            if df.select(col).dtypes[0][1] == 'int' or df.select(col).dtypes[0][1] == 'float':
                 max = df.agg({col: "max"}).collect()[0][0]
                 min = df.agg({col: "min"}).collect()[0][0]
-                self.ranges[col] = max - min
+                self.ranges[idx] = max - min
             else:
-                self.ranges[col] = 0
+                self.ranges[idx] = 0
+            idx += 1
 
         # self.sim_matrix = np.zeros((df.count(), df.count()), dtype=np.float16)
-
-    def calculate_gower_distance(self, df_row: pyspark.sql.Row):
-        """
-        Due to how our columns have a different impact on the similarity
-        between movies, we need to account for a different weight between each
-        one. See https://medium.com/analytics-vidhya/gowers-distance-899f9c4bd553
-        :param df_row: The row to use
-        :example
-        df.rdd.map(self.calculate_gower_distance)
-        :return:
-        """
-        sum_sj = 0
-        for col in df_row.columns:
-            if type(df_row[col]) == VectorUDT():
-                # Embedded vector - Need to go through and generate NTT/NNEQ/NFF
-                # See article
-                ntt = 0
-                nneq = 0
-                nff = 0
-                for j in range(df_row[col]):
-                    if df_row[col][j] and self.subject_movie[col][j]:
-                        ntt += 1
-                    elif df_row[col][j] != self.subject_movie[col][j]:
-                        nneq += 1
-                    else:
-                        nff += 1
-                sum_sj += nneq / (ntt + (nneq + ntt))
-            else:
-                # Numerical
-                sum_sj += 1 - (np.abs(df_row[col] - self.subject_movie[col]) / self.ranges[col])
-
-        return 1 - (sum_sj / len(df_row.columns))
 
     def generate_movie_similarity(self, df):
         """
@@ -129,21 +131,13 @@ class SimilarityRowGenerator:
         :return:
         """
         # TODO: BROKEN
-        df.show()
+        df.show(10)
         df.printSchema()
-        print("generating rdd")
-        rdd = df.rdd
-        print("Trying to print collect")
-        print("The rdd is", rdd.count(), "long")
-        print(rdd.collect())
-        print("mapping rdd")
-        rdd2 = rdd.map(lambda x: (x, 1))
-        print("trying to print rdd")
-        for element in rdd2.collect():
-            print(element)
 
-        gower_distances = rdd.map(self.calculate_gower_distance)
-        gower_distances.collect()
+        df = df.rdd.map(lambda x: calculate_gower_distance(x, self.subject_movie, self.ranges))
+
+        print(df.collect())
+        return df.collect()
 
     def generate_user_similarity(self):
         """
@@ -152,6 +146,21 @@ class SimilarityRowGenerator:
         :return:
         """
         pass
+
+
+def get_ranges(df):
+    ranges = {}
+    idx = 0
+    for col in df.columns:
+        if df.select(col).dtypes[0][1] == 'int' or df.select(col).dtypes[0][1] == 'float':
+            max = df.agg({col: "max"}).collect()[0][0]
+            min = df.agg({col: "min"}).collect()[0][0]
+            ranges[idx] = max - min
+        else:
+            ranges[idx] = 0
+        idx += 1
+
+    return ranges
 
 
 def init_structtype():
@@ -202,6 +211,34 @@ def drop_useless_columns(df):
     return df
 
 
+def generate_movie_similarity_one_row(subject_movie, df, ranges):
+        """
+        Generates embedded vectors for the actor and genres,
+        appends them to one another, computes cosine similarity
+        and saves the matrix
+        :return:
+        """
+        print("Getting new movie similarity list")
+        new_df = df.rdd.map(lambda x: calculate_gower_distance(x, subject_movie, ranges))
+
+        collected_rdd = new_df.collect()
+
+        print(collected_rdd)
+        return collected_rdd
+
+
+def generate_movie_similarity_all(df, ranges):
+
+    sim_matrix = []
+
+    collected_rdd = df.rdd.collect()
+
+    for row in collected_rdd:
+        sim_matrix.append(generate_movie_similarity_one_row(row, df, ranges))
+
+    return sim_matrix
+
+
 # Tester code
 if __name__ == "__main__":
     # ================= init spark =================
@@ -218,11 +255,28 @@ if __name__ == "__main__":
     spark = SQLContext(sc)
     print("Completed initialisation. Don't worry about the previous error messages")
 
+    movie_df: pd.DataFrame = pd.DataFrame(pickle_manager.load_pickle("../pickles/organised_movies.pickle.lz4"))
+
+    # Shuffle it so that we're being fair
+    movie_df = movie_df.dropna().sample(2000, random_state=42)
+
+    movies_that_exist = set()
+    for index, row in movie_df.iterrows():
+        movies_that_exist.add(row['imdbId'])
+
+    rating_df: pd.DataFrame = pd.DataFrame(pickle_manager.load_pickle("../pickles/organised_ratings.pickle.lz4"))
+    to_delete = []
+    for index, row in rating_df.iterrows():
+        if row['imdbId'] not in movies_that_exist:
+            to_delete.append(index)
+
+    rating_df = rating_df.drop(to_delete)
+
     # ================= init dataset =================
-    movie_df = pickle_manager.load_pickle("../pickles/organised_movies.pickle.lz4")
+    # movie_df = pickle_manager.load_pickle("../pickles/organised_movies.pickle.lz4")
     schema = init_structtype()
 
-    movie_df = spark.createDataFrame(movie_df, schema=schema)
+    movie_df = spark.createDataFrame(movie_df, schema=schema).dropna()
     movie_df = movie_df.repartition(12)
 
     # ================= embed sets =================
@@ -238,21 +292,15 @@ if __name__ == "__main__":
     small_df = drop_useless_columns(movie_df)
     small_df.printSchema()
     small_df.show()
-    small_df = small_df.repartition(80)
-    print(small_df.rdd.getNumPartitions())
-    # Hacky solution - truncate the dataframe
 
-    print(small_df.rdd.collect())
-    print("The rdd is", small_df.rdd.count(), "long")
-    print("Printed rdd")
-    exit(1)
-    # TODO: BROKEN
-    print("generating rdd")
-
-    rdd = small_df.rdd
-    print("Trying to print collect")
-    print(rdd.collect())
     # ================= build similarity matrix and save =================
-    sim = SimilarityRowGenerator(small_df[0], small_df)
-    sim.generate_movie_similarity(small_df)
+    # sim = SimilarityRowGenerator(small_df.rdd.first(), small_df)
+
+
+
+    # sim.generate_movie_similarity(small_df)
+    # small_df = small_df.foreach(lambda x: generate_movie_similarity_all(x, broadcast_df, get_ranges(broadcast_df), sim_matrix, idx))
+    sim_matrix = generate_movie_similarity_all(small_df, get_ranges(small_df))
     # TODO: Merge rows into a single similarity matrix which has [a][b] operators
+    print(sim_matrix)
+    pickle_manager.save_lzma_pickle(sim_matrix, "sim_matrix.pickle.lz4")
