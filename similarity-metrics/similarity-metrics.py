@@ -259,10 +259,13 @@ if __name__ == "__main__":
 
     # Shuffle it so that we're being fair
     movie_df = movie_df.dropna().sample(2000, random_state=42)
+    pickle_manager.save_lzma_pickle(movie_df, "movie_df_in_pandas_form.pickle.lz4")
 
     movies_that_exist = set()
     for index, row in movie_df.iterrows():
         movies_that_exist.add(row['imdbId'])
+
+    pickle_manager.save_lzma_pickle(movies_that_exist, "movies_that_exist.pickle.lz4")
 
     rating_df: pd.DataFrame = pd.DataFrame(pickle_manager.load_pickle("../pickles/organised_ratings.pickle.lz4"))
     to_delete = []
@@ -271,6 +274,8 @@ if __name__ == "__main__":
             to_delete.append(index)
 
     rating_df = rating_df.drop(to_delete)
+
+    pickle_manager.save_lzma_pickle(rating_df, "rating_df.pickle.lz4")
 
     # ================= init dataset =================
     # movie_df = pickle_manager.load_pickle("../pickles/organised_movies.pickle.lz4")
