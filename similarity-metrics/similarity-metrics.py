@@ -39,8 +39,13 @@ class VectorEmbedder:
         vector = [0] * self.length
         for value in value_string.split(sep=", "):
             vector[self.class_dict[value]] = 1
-
         return vector
+
+
+def to_sparse(array_type):
+    array_type = np.array(array_type)
+    nonzero = np.nonzero(array_type)[0]
+    return Vectors.sparse(len(array_type), nonzero, array_type[nonzero])
 
 
 def embed_vector(df, to_embed, embedded_column):
@@ -51,9 +56,11 @@ def embed_vector(df, to_embed, embedded_column):
     :param embedded_column:
     :return:
     """
+    print("There are", df.select(to_embed).count(), "things to embed for", to_embed)
     setup = VectorEmbedder(df.select(to_embed).collect(), to_embed)
+    print("That means that setup's length is", setup.length)
     generated_embedded_vector_udf = udf(
-        lambda x: Vectors.dense(setup.generate_embedded_vector(x)),
+        lambda x: to_sparse(setup.generate_embedded_vector(x)),
         VectorUDT()
     )
     return df.withColumn(embedded_column, generated_embedded_vector_udf(to_embed))
@@ -94,7 +101,7 @@ class SimilarityRowGenerator:
         """
         sum_sj = 0
         for col in df_row.columns:
-            if type(df_row[col]) == ArrayType(IntegerType()):
+            if type(df_row[col]) == VectorUDT():
                 # Embedded vector - Need to go through and generate NTT/NNEQ/NFF
                 # See article
                 ntt = 0
@@ -202,19 +209,21 @@ if __name__ == "__main__":
     conf.set("spark.driver.memory", "16g")
     conf.set("spark.executor.memory", "8g")
     conf.set("spark.driver.maxResultSize", "0")
-    conf.set("spark.cores.max", "4")
+    conf.set("spark.cores.max", "12")
     conf.set("spark.executor.heartbeatInterval", "3600")
 
     sc = SparkContext.getOrCreate(conf)
     sc.setLogLevel('ERROR')
 
     spark = SQLContext(sc)
+    print("Completed initialisation. Don't worry about the previous error messages")
 
     # ================= init dataset =================
     movie_df = pickle_manager.load_pickle("../pickles/organised_movies.pickle.lz4")
     schema = init_structtype()
 
     movie_df = spark.createDataFrame(movie_df, schema=schema)
+    movie_df = movie_df.repartition(12)
 
     # ================= embed sets =================
     movie_df = embed_vector(
@@ -227,19 +236,21 @@ if __name__ == "__main__":
 
     # ================= clean out dataset =================
     small_df = drop_useless_columns(movie_df)
+    small_df.printSchema()
+    small_df.show()
+    small_df = small_df.repartition(80)
+    print(small_df.rdd.getNumPartitions())
+    # Hacky solution - truncate the dataframe
 
     print(small_df.rdd.collect())
+    print("The rdd is", small_df.rdd.count(), "long")
     print("Printed rdd")
     exit(1)
-
-    small_df.show()
-
     # TODO: BROKEN
     print("generating rdd")
 
     rdd = small_df.rdd
     print("Trying to print collect")
-    print("The rdd is", rdd.count(), "long")
     print(rdd.collect())
     # ================= build similarity matrix and save =================
     sim = SimilarityRowGenerator(small_df[0], small_df)
