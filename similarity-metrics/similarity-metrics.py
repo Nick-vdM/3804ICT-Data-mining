@@ -42,6 +42,19 @@ class VectorEmbedder:
         return vector
 
 
+def embed_vector(df, to_embed, embedded_column):
+    """
+    Uses the VectorEmbedder to embed a vector in a given dataframe
+    :param df:
+    :param to_embed:
+    :param embedded_column:
+    :return:
+    """
+    setup = VectorEmbedder(df.select(to_embed).collect(), to_embed)
+    generated_embedded_vector_udf = udf(lambda x: setup.generate_embedded_vector(x), ArrayType(IntegerType()))
+    return df.withColumn(embedded_column, generated_embedded_vector_udf(to_embed))
+
+
 class SimilarityRowGenerator:
     """
     Generates a single similarity row
@@ -117,7 +130,7 @@ class SimilarityRowGenerator:
         pass
 
 
-def generate_structtype():
+def init_structtype():
     return StructType([
         StructField("imdbId", StringType(), False),
         StructField("title", StringType(), True),
@@ -167,8 +180,7 @@ def drop_useless_columns(df):
 
 # Tester code
 if __name__ == "__main__":
-    movie_df = pickle_manager.load_pickle("../pickles/organised_movies.pickle.lz4")
-
+    # ================= init spark =================
     conf = SparkConf()
     conf.set("spark.driver.memory", "10g")
     conf.set("spark.driver.maxResultSize", "0")
@@ -180,21 +192,26 @@ if __name__ == "__main__":
 
     spark = SQLContext(sc)
 
-    schema = generate_structtype()
+    # ================= init dataset =================
+    movie_df = pickle_manager.load_pickle("../pickles/organised_movies.pickle.lz4")
+    schema = init_structtype()
 
     movie_df = spark.createDataFrame(movie_df, schema=schema)
 
-    genre_setup = VectorEmbedder(movie_df.select("genre").collect(), "genre")
-    compute_vector_udf = udf(lambda x: genre_setup.generate_embedded_vector(x), ArrayType(IntegerType()))
-    movie_df = movie_df.withColumn("genre_vector", compute_vector_udf("genre"))
+    # ================= embed sets =================
+    movie_df = embed_vector(
+        movie_df, "genre", "genre_feature"
+    )
 
-    actor_setup = VectorEmbedder(movie_df.select("actors").collect(), "actors")
-    compute_vector_udf = udf(lambda x: actor_setup.generate_embedded_vector(x), ArrayType(IntegerType()))
-    movie_df = movie_df.withColumn("actor_vector", compute_vector_udf("actors"))
+    movie_df = embed_vector(
+        movie_df, "actors", "actor_feature"
+    )
 
+    # ================= clean out dataset =================
     small_df = drop_useless_columns(movie_df)
 
     small_df.show()
+    # ================= build similarity matrix and save =================
 
     sim = SimilarityRowGenerator(small_df[0], small_df)
     # TODO: Merge rows into a single similarity matrix which has [a][b] operators
