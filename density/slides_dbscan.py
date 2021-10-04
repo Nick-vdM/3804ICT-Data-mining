@@ -43,8 +43,8 @@ def slides_dbscan(similarity_matrix, radius: float, minimum_points: int):
         unclustered.remove(point)
 
         for potential_point in neighbourhood:
-            # neighbourhood already only contains unvisited points
-            unvisited.remove(potential_point)
+            if potential_point in unvisited:
+                unvisited.remove(potential_point)
 
             # if epsilon neighbourhood has at least minimum points
             inner_neighbourhood = find_neighbourhood(
