@@ -1,4 +1,5 @@
 from itertools import combinations
+from time import perf_counter
 
 class Node:
     def __init__(self,item,parent,count = 1):
@@ -133,7 +134,7 @@ dataSet = [ ['I1','I2','I5'],
             ['I1','I2','I3'],
         ]
 
-
+start = perf_counter()
 freqTable = generateFreqTable(dataSet)
 #print(freqTable)
 
@@ -154,14 +155,14 @@ for itemSet in dataSet:
 #fpTree.printTree(fpTree.root,0)
 
 patterns = getFreqPatterns(fpTree, orderList)
+end = perf_counter()
+print(end - start, start, end)
+print("Mine")
 for pattern in patterns:
     print(pattern)
 
 
-
-
                 
-
 
 
 
