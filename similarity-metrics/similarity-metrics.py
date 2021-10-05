@@ -244,12 +244,14 @@ if __name__ == "__main__":
     # ================= init spark =================
     conf = SparkConf()
     conf.set("spark.driver.memory", "16g")
-    conf.set("spark.executor.memory", "8g")
+    conf.set("spark.executor.memory", "16g")
     conf.set("spark.driver.maxResultSize", "0")
-    conf.set("spark.cores.max", "12")
+    conf.set("spark.cores.max", "6")
+    conf.set("spark.executor.cores", "6")
     conf.set("spark.executor.heartbeatInterval", "3600")
 
     sc = SparkContext.getOrCreate(conf)
+
     sc.setLogLevel('ERROR')
 
     spark = SQLContext(sc)
@@ -259,7 +261,7 @@ if __name__ == "__main__":
 
     # Shuffle it so that we're being fair
     movie_df = movie_df.dropna().sample(2000, random_state=42)
-    pickle_manager.save_lzma_pickle(movie_df, "movie_df_in_pandas_form.pickle.lz4")
+    pickle_manager.save_lzma_pickle(movie_df, "../pickles/movie_df_in_pandas_form.pickle.lz4")
 
     movies_that_exist = set()
     for index, row in movie_df.iterrows():
