@@ -10,6 +10,7 @@ from useful_tools import pickle_manager
 
 test = 0
 
+
 class VectorEmbedder:
     """
     Functor. Embeds a given column of a pyspark dataframe
@@ -91,11 +92,11 @@ def calculate_gower_distance(row, row2, ranges):
 
     return 1 - (sum_sj / len(row))
 
+
 class GowerFunctor:
     def __init__(self, row, ranges):
         self.row = row
         self.ranges = ranges
-
 
 
 class SimilarityRowGenerator:
@@ -212,23 +213,22 @@ def drop_useless_columns(df):
 
 
 def generate_movie_similarity_one_row(subject_movie, df, ranges):
-        """
-        Generates embedded vectors for the actor and genres,
-        appends them to one another, computes cosine similarity
-        and saves the matrix
-        :return:
-        """
-        print("Getting new movie similarity list")
-        new_df = df.rdd.map(lambda x: calculate_gower_distance(x, subject_movie, ranges))
+    """
+    Generates embedded vectors for the actor and genres,
+    appends them to one another, computes cosine similarity
+    and saves the matrix
+    :return:
+    """
+    print("Getting new movie similarity list")
+    new_df = df.rdd.map(lambda x: calculate_gower_distance(x, subject_movie, ranges))
 
-        collected_rdd = new_df.collect()
+    collected_rdd = new_df.collect()
 
-        print(collected_rdd)
-        return collected_rdd
+    print(collected_rdd)
+    return collected_rdd
 
 
 def generate_movie_similarity_all(df, ranges):
-
     sim_matrix = []
 
     collected_rdd = df.rdd.collect()
@@ -265,7 +265,10 @@ if __name__ == "__main__":
     for index, row in movie_df.iterrows():
         movies_that_exist.add(row['imdbId'])
 
-    pickle_manager.save_lzma_pickle(movies_that_exist, "movies_that_exist.pickle.lz4")
+    pickle_manager.save_lzma_pickle(
+        movies_that_exist,
+        "../pickles/movies_that_exist.pickle.lz4"
+    )
 
     rating_df: pd.DataFrame = pd.DataFrame(pickle_manager.load_pickle("../pickles/organised_ratings.pickle.lz4"))
     to_delete = []
@@ -275,7 +278,9 @@ if __name__ == "__main__":
 
     rating_df = rating_df.drop(to_delete)
 
-    pickle_manager.save_lzma_pickle(rating_df, "rating_df.pickle.lz4")
+    pickle_manager.save_lzma_pickle(
+        rating_df, "../pickles/rating_df.pickle.lz4"
+    )
 
     # ================= init dataset =================
     # movie_df = pickle_manager.load_pickle("../pickles/organised_movies.pickle.lz4")
@@ -301,11 +306,12 @@ if __name__ == "__main__":
     # ================= build similarity matrix and save =================
     # sim = SimilarityRowGenerator(small_df.rdd.first(), small_df)
 
-
-
     # sim.generate_movie_similarity(small_df)
     # small_df = small_df.foreach(lambda x: generate_movie_similarity_all(x, broadcast_df, get_ranges(broadcast_df), sim_matrix, idx))
     sim_matrix = generate_movie_similarity_all(small_df, get_ranges(small_df))
     # TODO: Merge rows into a single similarity matrix which has [a][b] operators
     print(sim_matrix)
-    pickle_manager.save_lzma_pickle(sim_matrix, "sim_matrix.pickle.lz4")
+    pickle_manager.save_lzma_pickle(
+        sim_matrix,
+        "../pickles/sim_matrix.pickle.lz4"
+    )
