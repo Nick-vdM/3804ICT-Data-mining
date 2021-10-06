@@ -1,5 +1,6 @@
 import typing
-
+from sklearn import preprocessing
+from sklearn.neighbors import KNeighborsClassifier
 import numpy as np
 import pandas as pd
 from useful_tools import pickle_manager
@@ -119,9 +120,10 @@ class OriginalKNN:
         for user_id in self.user_ratings.keys():
             if len(self.user_ratings[user_id].training) == 0 or len(self.user_ratings[user_id].testing) == 0:
                 continue
-            sum_accuracy += self._get_user_accuracy(user_id)
+            accuracy = self._get_user_accuracy(user_id)
+            sum_accuracy += accuracy
             num += 1
-            print(f"Accuracy for user_id {user_id}: {sum_accuracy / num}")
+            print(f"Accuracy for user_id {user_id}: {accuracy}. Average accuracy so far: {sum_accuracy / num}")
 
         return sum_accuracy / num
 
@@ -131,6 +133,131 @@ def clean_sim_matrix(sim_matrix):
         sim_matrix[i][i] = 0
 
     return sim_matrix
+
+
+class SciKNN:
+    def __init__(self, user_ratings, movie_df: pd.DataFrame, k=6):
+        self.user_ratings = user_ratings
+        self.movie_df: pd.DataFrame = movie_df
+        self.k = k
+
+    def _prep_for_user(self, user_id):
+
+        le = preprocessing.LabelEncoder()
+
+        genre = []
+        duration = []
+        director = []
+        writer = []
+        production_company = []
+        description = []
+        actors = []
+        avg_vote = []
+        budget = []
+        year = []
+
+        train_classes = []
+
+        for index, row in self.user_ratings[user_id].training.iterrows():
+            movie_row_idx = np.where(self.movie_df["imdbId"] == row["imdbId"])
+            movie_row = self.movie_df.iloc[movie_row_idx[0][0]]
+
+            genre.append(movie_row["genre"])
+            duration.append(movie_row["duration"])
+            director.append(movie_row["director"])
+            writer.append(movie_row["writer"])
+            production_company.append(movie_row["production_company"])
+            description.append(movie_row["description"])
+            actors.append(movie_row["actors"])
+            avg_vote.append(movie_row["avg_vote"])
+            budget.append(movie_row["budget"])
+            year.append(movie_row["year"])
+
+            train_classes.append(row["class"])
+
+        genre = le.fit_transform(genre)
+        director = le.fit_transform(director)
+        writer = le.fit_transform(writer)
+        production_company = le.fit_transform(production_company)
+        description = le.fit_transform(description)
+        actors = le.fit_transform(actors)
+
+        train_features = list(zip(genre, duration, director, writer, production_company, description, actors, avg_vote, budget, year))
+
+        genre = []
+        duration = []
+        director = []
+        writer = []
+        production_company = []
+        description = []
+        actors = []
+        avg_vote = []
+        budget = []
+        year = []
+
+        test_classes = []
+
+        for index, row in self.user_ratings[user_id].testing.iterrows():
+            movie_row_idx = np.where(self.movie_df["imdbId"] == row["imdbId"])
+            movie_row = self.movie_df.iloc[movie_row_idx[0][0]]
+
+            genre.append(movie_row["genre"])
+            duration.append(movie_row["duration"])
+            director.append(movie_row["director"])
+            writer.append(movie_row["writer"])
+            production_company.append(movie_row["production_company"])
+            description.append(movie_row["description"])
+            actors.append(movie_row["actors"])
+            avg_vote.append(movie_row["avg_vote"])
+            budget.append(movie_row["budget"])
+            year.append(movie_row["year"])
+
+            test_classes.append(row["class"])
+
+        genre = le.fit_transform(genre)
+        director = le.fit_transform(director)
+        writer = le.fit_transform(writer)
+        production_company = le.fit_transform(production_company)
+        description = le.fit_transform(description)
+        actors = le.fit_transform(actors)
+
+        test_features = list(
+            zip(genre, duration, director, writer, production_company, description, actors, avg_vote, budget, year))
+
+        return train_features, train_classes, test_features, test_classes
+
+    def _run_knn_for_user(self, user_id):
+        train_features, train_classes, test_features, test_classes = self._prep_for_user(user_id)
+
+        k = min(len(train_classes), self.k)
+        model = KNeighborsClassifier(n_neighbors=k)
+        model.fit(train_features, train_classes)
+
+        predicted = model.predict(test_features)
+
+        correct = 0
+        incorrect = 0
+        for i in range(len(predicted)):
+            if predicted[i] == test_classes[i]:
+                correct += 1
+            else:
+                incorrect += 1
+
+        return correct / (correct + incorrect)
+
+    def evaluate(self):
+        num = 0
+        sum_accuracy = 0
+
+        for user_id in self.user_ratings.keys():
+            if len(self.user_ratings[user_id].training) == 0 or len(self.user_ratings[user_id].testing) == 0:
+                continue
+            accuracy = self._run_knn_for_user(user_id)
+            sum_accuracy += accuracy
+            num += 1
+            print(f"Accuracy for user_id {user_id}: {accuracy}. Average accuracy so far: {sum_accuracy / num}")
+
+        return sum_accuracy / num
 
 
 if __name__ == "__main__":
@@ -149,6 +276,8 @@ if __name__ == "__main__":
     set_sep = SetSeparator(rating_df)
     rating_sets = set_sep.get_sets_for_all_users()
 
-    knn_classifier = OriginalKNN(sim_matrix, rating_sets, movies_that_exist, movies_df)
+    # knn_classifier = OriginalKNN(sim_matrix, rating_sets, movies_that_exist, movies_df)
+    # print(f"Accuracy at k=6: {knn_classifier.evaluate()}")
 
+    knn_classifier = SciKNN(rating_sets, movies_df)
     print(f"Accuracy at k=6: {knn_classifier.evaluate()}")
