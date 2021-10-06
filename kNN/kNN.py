@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from useful_tools import pickle_manager
 from collections import namedtuple
+from pycaret import classification
 
 TrainTest = namedtuple('TrainTest', 'training testing')
 
@@ -117,10 +118,14 @@ class OriginalKNN:
         num = 0
         sum_accuracy = 0
 
+        accuracy_list = []
+        tested_movies_list = []
         for user_id in self.user_ratings.keys():
             if len(self.user_ratings[user_id].training) == 0 or len(self.user_ratings[user_id].testing) == 0:
                 continue
             accuracy = self._get_user_accuracy(user_id)
+            accuracy_list.append(accuracy)
+            tested_movies_list.append(len(self.user_ratings[user_id].testing))
             sum_accuracy += accuracy
             num += 1
             print(f"Accuracy for user_id {user_id}: {accuracy}. Average accuracy so far: {sum_accuracy / num}")
@@ -249,15 +254,88 @@ class SciKNN:
         num = 0
         sum_accuracy = 0
 
+        accuracy_list = []
+        tested_movies_list = []
         for user_id in self.user_ratings.keys():
             if len(self.user_ratings[user_id].training) == 0 or len(self.user_ratings[user_id].testing) == 0:
                 continue
             accuracy = self._run_knn_for_user(user_id)
+            accuracy_list.append(accuracy)
+            tested_movies_list.append(len(self.user_ratings[user_id].testing))
             sum_accuracy += accuracy
             num += 1
             print(f"Accuracy for user_id {user_id}: {accuracy}. Average accuracy so far: {sum_accuracy / num}")
 
-        return sum_accuracy / num
+        return sum_accuracy / num, accuracy_list, tested_movies_list
+
+
+class PycaretKNN:
+    def __init__(self, user_ratings, movie_df: pd.DataFrame, k=6):
+        self.user_ratings = user_ratings
+        self.movie_df: pd.DataFrame = movie_df
+        self.k = k
+
+    @staticmethod
+    def _add_class_to_movie_df(row, training, testing):
+        if row["imdbId"] in testing.imdbId.unique():
+            idx = np.where(testing["imdbId"] == row["imdbId"])
+            return testing.iloc[idx[0][0]]["class"]
+        else:
+            idx = np.where(training["imdbId"] == row["imdbId"])
+            return training.iloc[idx[0][0]]["class"]
+
+    def _format_for_pycaret(self, user_id):
+        training_ids = self.user_ratings[user_id].training.imdbId.unique()
+        testing_ids = self.user_ratings[user_id].testing.imdbId.unique()
+        to_delete = []
+        for index, row in self.movie_df.iterrows():
+            if row["imdbId"] not in training_ids and row["imdbId"] not in testing_ids:
+                to_delete.append(index)
+
+        user_movie_df = self.movie_df.drop(to_delete)
+        user_movie_df.insert(len(user_movie_df.columns), "class", user_movie_df.apply(lambda row: self._add_class_to_movie_df(row, self.user_ratings[user_id].training, self.user_ratings[user_id].testing), axis=1))
+
+        return user_movie_df
+
+    def _get_accuracy_for_user(self, user_id):
+        user_df = self._format_for_pycaret(user_id)
+
+        k = min(self.k, int(len(user_df) / 4))
+
+        user_setup = classification.setup(data=user_df, target='class', session_id=678, silent=True)
+
+        knn = classification.create_model('knn', n_neighbors=k, fold=2)
+        prediction = classification.predict_model(knn)
+
+        correct = 0
+        incorrect = 0
+        for index, row in prediction.iterrows():
+            if row["class"] == row["Label"]:
+                correct += 1
+            else:
+                incorrect += 1
+
+        return correct / (correct + incorrect), correct + incorrect
+
+    def evaluate(self):
+        num = 0
+        sum_accuracy = 0
+
+        accuracy_list = []
+        tested_movies_list = []
+        for user_id in self.user_ratings.keys():
+            try:
+                accuracy, tested_movies = self._get_accuracy_for_user(user_id)
+                sum_accuracy += accuracy
+                num += 1
+                accuracy_list.append(accuracy)
+                tested_movies_list.append(tested_movies)
+                print(f"Accuracy for user_id {user_id}: {accuracy}. Average accuracy so far: {sum_accuracy / num}")
+            except:
+                print(f"Failed to get accuracy for user_id {user_id}, skipping")
+                continue
+
+        return sum_accuracy / num, accuracy_list, tested_movies_list
 
 
 if __name__ == "__main__":
@@ -276,8 +354,26 @@ if __name__ == "__main__":
     set_sep = SetSeparator(rating_df)
     rating_sets = set_sep.get_sets_for_all_users()
 
-    # knn_classifier = OriginalKNN(sim_matrix, rating_sets, movies_that_exist, movies_df)
-    # print(f"Accuracy at k=6: {knn_classifier.evaluate()}")
+    original_output = []
+    for k in range(6):
+        knn_classifier = OriginalKNN(sim_matrix, rating_sets, movies_that_exist, movies_df, k=k)
+        accuracy, accuracy_list, tested_movies_list = knn_classifier.evaluate()
+        original_output.append((accuracy, accuracy_list, tested_movies_list))
+        print(f"Original kNN accuracy at k={k}: {accuracy}")
+    pickle_manager.save_lzma_pickle(original_output, "../pickles/original_knn_output.pickle.lz4")
 
-    knn_classifier = SciKNN(rating_sets, movies_df)
-    print(f"Accuracy at k=6: {knn_classifier.evaluate()}")
+    sciknn_output = []
+    for k in range(6):
+        knn_classifier = SciKNN(rating_sets, movies_df, k=k)
+        accuracy, accuracy_list, tested_movies_list = knn_classifier.evaluate()
+        sciknn_output.append((accuracy, accuracy_list, tested_movies_list))
+        print(f"Sk-learn kNN accuracy at k={k}: {accuracy}")
+    pickle_manager.save_lzma_pickle(sciknn_output, "../pickles/sklearn_knn_output.pickle.lz4")
+
+    pycaretknn_output = []
+    for k in range(6):
+        knn_classifier = PycaretKNN(rating_sets, movies_df, k=k)
+        accuracy, accuracy_list, tested_movies_list = knn_classifier.evaluate()
+        pycaretknn_output.append((accuracy, accuracy_list, tested_movies_list))
+        print(f"PyCaret kNN accuracy at k={k}: {accuracy}")
+    pickle_manager.save_lzma_pickle(pycaretknn_output, "../pickles/pycaret_knn_output.pickle.lz4")
