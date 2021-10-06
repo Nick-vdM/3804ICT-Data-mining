@@ -3,7 +3,7 @@ import csv
 import pandas as pd
 import numpy as np
 
-from proposal.useful_tools import pickle_manager
+from useful_tools import pickle_manager
 
 
 class data_integrator:
@@ -80,26 +80,30 @@ class data_integrator:
     def _set_movie_data_types(self, movies_df):
         # Since these require a kwarg operator
 
-        movie_genre_sets = movies_df["genre"].apply(self._map_str_to_set)
-        movies_df = movies_df.drop("genre", axis=1)
-        movies_df = movies_df.assign(genre=movie_genre_sets)
+        # movie_genre_sets = movies_df["genre"].apply(self._map_str_to_set)
+        # movies_df = movies_df.drop("genre", axis=1)
+        # movies_df = movies_df.assign(genre=movie_genre_sets)
 
-        movie_actor_sets = movies_df["actors"].apply(self._map_str_to_set)
-        movies_df = movies_df.drop("actors", axis=1)
+        # movie_actor_sets = movies_df["actors"].apply(self._map_str_to_set)
+        # movies_df = movies_df.drop("actors", axis=1)
+        # movies_df = movies_df.assign(actors=movie_actor_sets)
 
-        movies_df = movies_df.assign(actors=movie_actor_sets)
+        movie_budget = movies_df["budget"].apply(self._dollar_to_float)
+        movies_df = movies_df.drop("budget", axis=1)
+        movies_df = movies_df.assign(budget=movie_budget)
+
         movie_years = movies_df["year"].apply(self._fix_strings_in_int_fields)
         movies_df = movies_df.drop("year", axis=1)
-
         movies_df = movies_df.assign(year=movie_years)
+
         movies_metascore = movies_df["metascore"].apply(self._convert_float_to_int_fields)
         movies_df = movies_df.drop("metascore", axis=1)
-
         movies_df = movies_df.assign(metascore=movies_metascore)
+
         movies_reviews_from_users = movies_df["reviews_from_users"].apply(self._convert_float_to_int_fields)
         movies_df = movies_df.drop("reviews_from_users", axis=1)
-
         movies_df = movies_df.assign(reviews_from_users=movies_reviews_from_users)
+
         movies_reviews_from_critics = movies_df["reviews_from_critics"].apply(self._convert_float_to_int_fields)
         movies_df = movies_df.drop("reviews_from_critics", axis=1)
         movies_df = movies_df.assign(reviews_from_critics=movies_reviews_from_critics)
@@ -171,6 +175,15 @@ class data_integrator:
         unpadded_id = str(links_dict[movie_id])
         padded_id = "tt" + '0' * (7 - len(unpadded_id)) + unpadded_id
         return padded_id
+
+    @staticmethod
+    def _dollar_to_float(string_input):
+        if type(string_input) != str:
+            return string_input
+        elif string_input[0:2] == "$ ":
+            return float(string_input[2:])
+        elif string_input[0:3].isalpha():
+            return float(string_input[4:])
 
     @staticmethod
     def _map_str_to_set(input_val):
