@@ -31,7 +31,7 @@ class SetSeparator:
     def get_sets_for_all_users(self, test_proportion=0.2):
         user_ratings = {}
         for user in self.user_ids:
-            per_user_ratings = rating_df[rating_df["userId"] == user]
+            per_user_ratings = self.rating_df[self.rating_df["userId"] == user]
 
             train_set = per_user_ratings.sample(frac=(1-test_proportion), random_state=789)
             user_ratings[user] = TrainTest(train_set, per_user_ratings.drop(train_set.index))
@@ -51,7 +51,7 @@ class OriginalKNN:
         training = self.user_ratings[user_id].training
 
         sim_index = np.where(self.movie_df["imdbId"] == movie_id)[0][0]
-        similarities = zip(self.sim_matrix[sim_index], [i for i in range(len(sim_matrix[sim_index]))])
+        similarities = zip(self.sim_matrix[sim_index], [i for i in range(len(self.sim_matrix[sim_index]))])
         sorted_similarities = sorted(similarities, key=lambda x: x[0], reverse=True)
 
         like = 0
@@ -130,7 +130,7 @@ class OriginalKNN:
             num += 1
             print(f"Accuracy for user_id {user_id}: {accuracy}. Average accuracy so far: {sum_accuracy / num}")
 
-        return sum_accuracy / num
+        return sum_accuracy / num, accuracy_list, tested_movies_list
 
 
 def clean_sim_matrix(sim_matrix):
@@ -338,7 +338,7 @@ class PycaretKNN:
         return sum_accuracy / num, accuracy_list, tested_movies_list
 
 
-if __name__ == "__main__":
+def main():
     rating_df: pd.DataFrame = pickle_manager.load_pickle("../pickles/rating_df.pickle.lz4")
     movies_that_exist: set = pickle_manager.load_pickle("../pickles/movies_that_exist.pickle.lz4")
     movies_df: pd.DataFrame = pickle_manager.load_pickle("../pickles/movie_df_in_pandas_form.pickle.lz4")
@@ -355,7 +355,7 @@ if __name__ == "__main__":
     rating_sets = set_sep.get_sets_for_all_users()
 
     original_output = []
-    for k in range(6):
+    for k in range(1, 6):
         knn_classifier = OriginalKNN(sim_matrix, rating_sets, movies_that_exist, movies_df, k=k)
         accuracy, accuracy_list, tested_movies_list = knn_classifier.evaluate()
         original_output.append((accuracy, accuracy_list, tested_movies_list))
@@ -363,7 +363,7 @@ if __name__ == "__main__":
     pickle_manager.save_lzma_pickle(original_output, "../pickles/original_knn_output.pickle.lz4")
 
     sciknn_output = []
-    for k in range(6):
+    for k in range(1, 6):
         knn_classifier = SciKNN(rating_sets, movies_df, k=k)
         accuracy, accuracy_list, tested_movies_list = knn_classifier.evaluate()
         sciknn_output.append((accuracy, accuracy_list, tested_movies_list))
@@ -371,9 +371,13 @@ if __name__ == "__main__":
     pickle_manager.save_lzma_pickle(sciknn_output, "../pickles/sklearn_knn_output.pickle.lz4")
 
     pycaretknn_output = []
-    for k in range(6):
+    for k in range(1, 6):
         knn_classifier = PycaretKNN(rating_sets, movies_df, k=k)
         accuracy, accuracy_list, tested_movies_list = knn_classifier.evaluate()
         pycaretknn_output.append((accuracy, accuracy_list, tested_movies_list))
         print(f"PyCaret kNN accuracy at k={k}: {accuracy}")
     pickle_manager.save_lzma_pickle(pycaretknn_output, "../pickles/pycaret_knn_output.pickle.lz4")
+
+
+if __name__ == "__main__":
+    main()
