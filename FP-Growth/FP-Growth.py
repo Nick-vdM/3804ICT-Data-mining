@@ -1,8 +1,10 @@
-from itertools import combinations, count
+import itertools
 from time import perf_counter
 
 from numpy import fromregex
+from numpy.lib.function_base import insert
 from pandas.core import base
+from scipy.sparse import data
 import pickle_manager
 import pandas as pd
 import os
@@ -25,11 +27,35 @@ class Node:
             self.children[item] = Node(item,self, count)
 
 class Tree:
-    def __init__(self):
+    def __init__(self, itemSetList, frequency, minSupport):
         self.root = Node(None,None)
         self.headerTable = {}
+        self.createTree(itemSetList, frequency, minSupport)
 
-    def insertItemSet(self,items, count = 1):
+    def createTree(self,itemSetList,frequency, minSupport):
+        #Create header table with each item and count frequcny of each
+        i = 0
+        for itemSet in itemSetList:
+            for item in itemSet:
+                if(item in self.headerTable):
+                    self.headerTable[item] = [self.headerTable[item][0] + frequency[i], None]
+                else:
+                    self.headerTable[item] = [frequency[i], None]
+            i=i+1
+
+        for k in list(self.headerTable.keys()):
+            if self.headerTable[k][0] < minSupport:
+                del self.headerTable[k]
+
+        i = 0
+        for itemSet in itemSetList:
+            itemSet = [item for item in itemSet if item in self.headerTable]
+            itemSet.sort(key=lambda item: self.headerTable[item][0], reverse=True)
+            self.insertItemSet(itemSet, frequency[i])
+            i=i+1
+
+
+    def insertItemSet(self,items,count):
         currentNode = self.root
         while(len(items) != 0):
             if(items[0] in currentNode.children):
@@ -38,17 +64,17 @@ class Tree:
                 items.pop(0)
             else:
                 currentNode.addNode(items[0], count)
-                if(items[0] in self.headerTable):
-                    currentItem = self.headerTable[items[0]] 
+                #If item already in the header table then follow the links to the next slot
+                currentItem = self.headerTable[items[0]][1] 
+                if(currentItem == None):
+                    self.headerTable[items[0]][1] = currentNode.children[items[0]]
+                else:
                     while(1):
                         if(currentItem.link == None):
                             currentItem.link = currentNode.children[items[0]]
                             break
                         else:   
                             currentItem = currentItem.link   
-                else:
-                    self.headerTable[items[0]] = currentNode.children[items[0]]
-
                 currentNode = currentNode.children[items[0]]
                 items.pop(0)
 
@@ -65,161 +91,146 @@ class Tree:
         for child in root.children:
             self.printTree(root.children[child],level + 1)
 
-    def traverseToNode(self,endItem,itemSet, node, support, parentItems):
-        items = parentItems.copy()
-        #print(endItem,"Giving",items)
-
-        if((node.count < support and node != self.root) or (node.item == endItem)):
-            if(len(items) > 0):
-                itemSet.insert(len(itemSet), items)
-            return
-
-        if(node != self.root):
-            items.insert(len(items),[node.item,node.count])
-
-        #print(endItem,"Adding",items)
-        for key, value in node.children.items():
-            self.traverseToNode(endItem, itemSet, node.children[key], support, items)
-
-        if(len(node.children)==0 and len(items) > 0):
-            itemSet.insert(len(items), items)
-            return
-
-
-def generateFreqTable(dataSet):
-    freqTable = {}
-    for itemSet in dataSet:
-        for item in itemSet:
-            if(item in freqTable):
-                freqTable[item] = freqTable[item] + 1
-            else:
-                freqTable[item] = 1
-
-    freqTable = dict(sorted(freqTable.items(), key=lambda item: -item[1]))
-    return freqTable
-
-
-
-
-
-def getFreqPatterns(tree, orderList, support, freqTable, dataSetSize):
-    freqPatterns = []
-    for item in reversed(orderList):
-        currentNode = tree.headerTable[item]
-        prefixPaths = []
+    def getAllPaths(self, item):
+        allPaths = []
+        currentNode = self.headerTable[item][1]
         while(1):
-            branch = tree.traverseToRoot(currentNode,[])
+            branch = []
+            self.traverseToRoot(currentNode,branch)
             branch.remove(item)
-            prefixPaths.insert(len(prefixPaths),[branch,currentNode.count])
             if(currentNode.link == None):
+                if(len(branch) > 0):
+                    allPaths.insert(0,(branch,currentNode.count))
                 break
             else:
+                if(len(branch) > 0):
+                    allPaths.insert(0,(branch,currentNode.count))
                 currentNode = currentNode.link
+        return allPaths
 
-        conditionalTree = Tree()
-        for prefixPath in prefixPaths:
-            conditionalTree.insertItemSet(prefixPath[0],prefixPath[1])
-        #print(item, support)
-        #conditionalTree.printTree(conditionalTree.root,0)
-        basePatterns = []
-        conditionalTree.traverseToNode(item,basePatterns,conditionalTree.root,support,[])
-        if(item == 'tt0076759'):
-            conditionalTree.printTree(conditionalTree.root,0)
-        for i in range(0,len(basePatterns)):
-            basePatterns[i].insert(len(basePatterns[i]),item)
-            for x in range(0,len(basePatterns[i])+1):
-                for subset in combinations(basePatterns[i], x):
-                    if(item in subset):
-                        freqPatterns.insert(0,subset)
 
-        if(len(basePatterns) == 0):
-            freqPatterns.insert(0,[item])
 
-    for x in range(0,len(freqPatterns)):
-        supportCount = float("inf")
-        if(isinstance(freqPatterns[x], tuple)):
-            freqPatterns[x] = list(freqPatterns[x])
-        if(len(freqPatterns[x]) > 1):
-            for i in range(0,len(freqPatterns[x])):
-                if(isinstance(freqPatterns[x][i], list)):
-                    if(freqPatterns[x][i][1] < supportCount):
-                        supportCount = freqPatterns[x][i][1]
-                    freqPatterns[x][i] = freqPatterns[x][i][0]
-            freqPatterns[x].insert(len(freqPatterns[x]),supportCount)
-        else:
-            freqPatterns[x].insert(len(freqPatterns[x]), freqTable[freqPatterns[x][0]])
-   
-    #Remove single items that dont have enough support
-    for elem in list(freqPatterns):
-        if len(elem) == 2 and elem[1] < support:
-            freqPatterns.remove(elem)
-    #Convert support count to percentage
-    for i in range(0,len(freqPatterns)):
-        freqPatterns[i][-1] =  freqPatterns[i][-1]/dataSetSize
+def mineTree(tree,preFix,freqItemsList,minSupport):
+    sortedItemList = [item[0] for item in sorted(list(tree.headerTable.items()), key=lambda p:p[1][0])] 
+    #For each item from least supported to most
+    for item in sortedItemList:
+        newFreqSet = preFix.copy()
+        newFreqSet.add(item)
+        freqItemsList.append(newFreqSet)
+        allPaths = tree.getAllPaths(item)
+        #print(item)
+        #print(allPaths)
+        frequency = []
+        condPaths = []
+        for path in allPaths:
+            frequency.insert(len(frequency),path[1])
+            condPaths.insert(len(condPaths),path[0])
 
-    return freqPatterns
+        #Create new tree
+        #print(condPaths, frequency)
+        condTree = Tree(condPaths,frequency,minSupport)
+        #condTree.printTree(condTree.root, 0)
+        if len(condTree.headerTable) > 0:
+            mineTree(condTree,newFreqSet, freqItemsList, minSupport)
+
+
+def getAssociationRules(freqItemsList, dataSet, minConfidence):
+    rules = []
+    for items in freqItemsList:
+        items = list(items)
+        if(len(items) < 2):
+            continue
+        AUBsupport = 0
+        for itemSet in dataSet:
+            if(len(itemSet) > 0):
+                if(all(item in itemSet for item in items)):
+                    AUBsupport = AUBsupport + 1
+        for L in range(0, len(items)):
+            for subset in itertools.combinations(items, L):
+                A = list(subset)
+                B = [x for x in items if x not in A]
+                Asupport = 0
+                if(len(A) > 0 and len(B) > 0):
+                    for itemSet in dataSet:
+                        if(len(itemSet) > 0):
+                            if(all(item in itemSet for item in A)):
+                                Asupport = Asupport + 1            
+                if(Asupport > 0):
+                    if(AUBsupport/Asupport > minConfidence):
+                        rules.insert(0,[A,"->",B,AUBsupport/Asupport])
+    return rules
 
 
 df = pickle_manager.load_pickle("pickles\organised_ratings.pickle.lz4")
+results_df = pd.DataFrame(data={'col1':[], 'col2':[]})
+for y in range(50,50):
+    supportPercentage = 0.01 * y
+    print("Support Percentage", supportPercentage)
+    for x in range(0,6):
+        #print("Movie Rating: ", x)
+        dataSet = []
+        nElements = 0
+        for i in range(1,df['userId'].max()+1):
+            itemSet = []
+            itemSet = df.loc[(df['rating'] == x) & (df['userId'] == i)]['imdbId'].tolist()
+            dataSet.insert(0,itemSet)
+            nElements = nElements + len(itemSet)
+        #print("Number of elements: ", nElements)
+        dataSetSize = len(dataSet)
+        print(dataSetSize)
+        start = perf_counter()
+        #print("Creating FP tree")
+        frequency = [1 for i in range(len(dataSet))]
+        fpTree = Tree(dataSet,frequency,supportPercentage*dataSetSize)
+        freqItemsList = []
+        mineTree(fpTree, set(), freqItemsList,supportPercentage*dataSetSize)
+        print("Number of frequent sets:", len(freqItemsList))
+        if(len(freqItemsList) > 0):
+            rules = getAssociationRules(freqItemsList, dataSet, 0.7)
+            #for rule in rules:
+                #print(rule)
+            #print("Number of rules: ", len(rules))
+        end = perf_counter()
+        #print(end - start, start, end)
 
+results_df = pd.DataFrame(data={'Datset Size':[], 'Time Taken':[]})
+for y in range(20,123):
+    supportPercentage = 0.03
+    print("Support Percentage", supportPercentage)
+    for x in range(0,6):
+        #print("Movie Rating: ", x)
+        dataSet = []
+        nElements = 0
+        for i in range(1,df['userId'].max()+1):
+            itemSet = []
+            itemSet = df.loc[(df['rating'] == x) & (df['userId'] == i)]['imdbId'].tolist()
+            dataSet.insert(0,itemSet)
+            nElements = nElements + len(itemSet)
+        #print("Number of elements: ", nElements)
+        dataSet = dataSet[0:y*5]
+        #print(dataSet)
+        dataSetSize = len(dataSet)
+        print("Datset size: ", dataSetSize)
+        start = perf_counter()
+        #print("Creating FP tree")
+        frequency = [1 for i in range(len(dataSet))]
+        fpTree = Tree(dataSet,frequency,supportPercentage*dataSetSize)
+        #fpTree.printTree(fpTree.root,0)
+        #print(fpTree.headerTable)
+        freqItemsList = []
+        mineTree(fpTree, set(), freqItemsList,supportPercentage*dataSetSize)
+        print("Number of frequent sets:", len(freqItemsList))
+        #if(len(freqItemsList) > 0):
+            #rules = getAssociationRules(freqItemsList, dataSet, 0.7)
+            #for rule in rules:
+                #print(rule)
+            #print("Number of rules: ", len(rules))
+        end = perf_counter()
+        newRow = {'Datset Size': len(dataSet), 'Time Taken': end-start}
+        results_df = results_df.append(newRow, ignore_index=True)
+        print(end - start, start, end)
 
-dataSet = []
-for i in range(1,df['userId'].max()+1):
-    itemSet = []
-    itemSet = df.loc[(df['rating'] == 5) & (df['userId'] == i)]['imdbId'].tolist()
-    dataSet.insert(0,itemSet)
-
-            
-"""
-dataSet = [ ['I1','I2','I5'],
-            ['I2','I4'],
-            ['I2','I3'],
-            ['I1','I2','I4'],
-            ['I1','I3'],
-            ['I2','I3'],
-            ['I1','I3'],
-            ['I1','I2','I3','I5'],
-            ['I1','I2','I3'],
-        ]
-"""
-
-dataSetSize = len(dataSet)
-
-print("Generating Frequency table")
-start = perf_counter()
-freqTable = generateFreqTable(dataSet)
-#print(freqTable)
-
-orderList = []
-for i in freqTable:
-    orderList.insert(len(orderList),i)
-#print(orderList)
-
-for itemSet in dataSet:
-    dataSet[dataSet.index(itemSet)] = sorted(itemSet, key=lambda e: (orderList.index(e), e))
-
-#print(dataSet)
-
-print("Creating FP tree")
-fpTree = Tree()
-for itemSet in dataSet:
-    fpTree.insertItemSet(itemSet)
-#fpTree.printTree(fpTree.root,0)
-
-supportPercentage = 0.05
-print("Mining frequent patterns")
-print("Support of ",int(round(supportPercentage*dataSetSize)) )
-patterns = getFreqPatterns(fpTree, orderList, int(round(supportPercentage*dataSetSize)), freqTable, dataSetSize)
-end = perf_counter()
-print(end - start, start, end)
-
-for pattern in patterns:
-    print(pattern)
-print(len(patterns))
-
-
-
-                
+results_df.to_csv('Implementation.csv', index=False)
 
 
 
