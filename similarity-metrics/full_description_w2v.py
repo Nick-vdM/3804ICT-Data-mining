@@ -150,13 +150,13 @@ def main():
     print(sentence_features.head(10))
 
     pickle_manager.save_lzma_pickle(
-        sentences, 'pickles/sentences.pickle.lz4'
+        sentences, '../pickles/sentences.pickle.lz4'
     )
     pickle_manager.save_lzma_pickle(
-        pandas_w2v, 'pickles/pandas_w2v.pickle.lz4'
+        pandas_w2v, '../pickles/pandas_w2v.pickle.lz4'
     )
     pickle_manager.save_lzma_pickle(
-        sentence_features, 'pickles/sentence_features.pickle.lz4'
+        sentence_features, '../pickles/sentence_features.pickle.lz4'
     )
     sentence_features.describe()
 
