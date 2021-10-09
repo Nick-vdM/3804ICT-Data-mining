@@ -131,10 +131,6 @@ class SimilarityRowGenerator:
         and saves the matrix
         :return:
         """
-        # TODO: BROKEN
-        df.show(10)
-        df.printSchema()
-
         df = df.rdd.map(lambda x: calculate_gower_distance(x, self.subject_movie, self.ranges))
 
         print(df.collect())
@@ -311,7 +307,7 @@ if __name__ == "__main__":
     # sim.generate_movie_similarity(small_df)
     # small_df = small_df.foreach(lambda x: generate_movie_similarity_all(x, broadcast_df, get_ranges(broadcast_df), sim_matrix, idx))
     sim_matrix = generate_movie_similarity_all(small_df, get_ranges(small_df))
-    # TODO: Merge rows into a single similarity matrix which has [a][b] operators
+
     print(sim_matrix)
     pickle_manager.save_lzma_pickle(
         sim_matrix,
