@@ -3,10 +3,9 @@ To be ran after data_integrator.py, because the tables
 are such a mess afterwards that this makes things easier
 """
 import pandas as pd
-from scipy import stats
 
 from proposal import data_integrator
-from proposal.useful_tools import pickle_manager
+from useful_tools import pickle_manager
 
 
 class data_cleaner:
