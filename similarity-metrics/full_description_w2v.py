@@ -8,6 +8,7 @@ from pyspark.ml.feature import Tokenizer, StopWordsRemover, Word2Vec
 from pyspark.sql.types import *
 from nltk.stem.snowball import *
 from useful_tools import pickle_manager
+from sklearn import preprocessing
 
 
 class SentenceAverager:
@@ -33,6 +34,8 @@ class SentenceAverager:
 
         for _, row in self.sentences.iterrows():
             series.append(self.average_sentence(row['processed_description']))
+        # l2 norm - euclidean distance will now be equal to cosine simil
+        series = preprocessing.normalize(series, norm='l2')
 
         return pd.DataFrame(series)
 
@@ -42,8 +45,6 @@ class SentenceAverager:
             if word not in self.vector_lookup:
                 continue  # Not sure how this happens
             new_vector += self.vector_lookup[word]
-        # l1 norm
-        new_vector /= np.linalg.norm(new_vector, 1)
 
         return new_vector.tolist()
 
