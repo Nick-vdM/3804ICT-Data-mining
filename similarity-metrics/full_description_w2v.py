@@ -43,9 +43,8 @@ class SentenceAverager:
                 continue  # Not sure how this happens
             new_vector += self.vector_lookup[word]
         # l1 norm
-        vector_sum = new_vector.sum()
-        if vector_sum != 0:
-            new_vector /= abs(vector_sum)
+        new_vector /= np.linalg.norm(new_vector, 1)
+
         return new_vector.tolist()
 
 
@@ -143,8 +142,6 @@ def main():
     spark_movie_df = spark.createDataFrame(movie_df, schema=schema)
     sentences, pandas_w2v = create_word2vec(spark_movie_df, 'description')
 
-    print(pandas_w2v.columns)
-
     sa = SentenceAverager(sentences, pandas_w2v)
     sentence_features = sa.generate_sentence_features()
     print(sentence_features.head(10))
@@ -158,7 +155,7 @@ def main():
     pickle_manager.save_lzma_pickle(
         sentence_features, '../pickles/sentence_features.pickle.lz4'
     )
-    sentence_features.describe()
+    print(sentence_features.describe())
 
 
 if __name__ == '__main__':
