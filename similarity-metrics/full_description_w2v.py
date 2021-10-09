@@ -1,5 +1,5 @@
 import time
-
+import pyspark.sql.functions as F
 import numpy as np
 import pandas as pd
 from pyspark import SparkContext, SparkConf, SQLContext
@@ -40,10 +40,12 @@ class SentenceAverager:
         new_vector = np.zeros(self.vector_length)
         for word in sentence:
             if word not in self.vector_lookup:
-                continue # Not sure how this happens
+                continue  # Not sure how this happens
             new_vector += self.vector_lookup[word]
         # l1 norm
-        new_vector /= new_vector.sum()
+        vector_sum = new_vector.sum()
+        if vector_sum != 0:
+            new_vector /= abs(vector_sum)
         return new_vector.tolist()
 
 
@@ -80,6 +82,11 @@ def clean_text_for_w2v(dataframe: pd.DataFrame, column: str):
     :param column:
     :return:
     """
+    dataframe = dataframe.select(
+        [F.regexp_replace(col, r',|\.|&|\\|\||-|_', '').alias(col) \
+         for col in dataframe.columns]
+    )
+
     tokenizer = Tokenizer(inputCol=column, outputCol="tokenized")
     words_data = tokenizer.transform(dataframe)
 
@@ -151,7 +158,7 @@ def main():
     pickle_manager.save_lzma_pickle(
         sentence_features, 'pickles/sentence_features.pickle.lz4'
     )
-
+    sentence_features.describe()
 
 
 if __name__ == '__main__':
