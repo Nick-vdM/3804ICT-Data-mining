@@ -14,11 +14,12 @@ from useful_tools import pickle_manager
 from numba import njit
 
 
-def slides_dbscan(feature_vectors, radius: float, minimum_points: int, down_to=0):
+def optimised_slides_dbscan(feature_vectors, radius: float, minimum_points: int, down_to=0):
     """
     Does DBSCAN (Density Based Clustering of Applications with Noise)
     Time: O(n^2)
     Space: O(n^2) (pre-existing in similarity matrix)
+    :param down_to:
     :param feature_vectors: A lookup for distances. Should be able
     to call similarity_matrix[a][b] to be able to find the distance
     between a and b
@@ -32,9 +33,9 @@ def slides_dbscan(feature_vectors, radius: float, minimum_points: int, down_to=0
     unclustered = set(range(len(feature_vectors)))
     clusters = list()
     noise = list()
-
     while len(unvisited) > down_to:
-        print(len(unvisited))
+        if len(unvisited) % 100 == 0:
+            print(len(unvisited))
         point = random.sample(unvisited, 1)[0]
         unvisited.remove(point)
 
@@ -70,6 +71,7 @@ def slides_dbscan(feature_vectors, radius: float, minimum_points: int, down_to=0
     return clusters, noise
 
 
+@njit
 def find_neighbourhood(feature_vectors, point, radius, unvisited: set):
     neighbourhood = set()
     for u in unvisited:
@@ -78,13 +80,9 @@ def find_neighbourhood(feature_vectors, point, radius, unvisited: set):
     return neighbourhood
 
 
+@njit
 def euclid_distance(v1, v2):
-    # If we try to use the non-numpy version, this operation takes about 5
-    # seconds per node
-    total = 0
-    for i in range(len(v1)):
-        total += (v1[i] - v2[i]) ** 2
-    return total ** (1 / 2)
+    return np.sqrt(np.sum(np.square(np.subtract(v1, v2))))
 
 
 # This is so that I can just override the fit() function
@@ -109,7 +107,7 @@ class my_DBSCAN(DBSCAN):
         :param sample_weight:
         :return:
         """
-        (clusters, noise) = slides_dbscan(
+        (clusters, noise) = optimised_slides_dbscan(
             X, self.eps, self.min_samples
         )
 
@@ -145,9 +143,10 @@ if __name__ == '__main__':
 
     # Huh apparently we have nan. If we set to 0 then it should be fine
     MOVIES_FEATURES[np.isnan(MOVIES_FEATURES)] = 0
+
     print("Trying to do 3")
     start = time.perf_counter()
-    clusters, noise = slides_dbscan(
-        MOVIES_FEATURES, radius=50, minimum_points=100, down_to=len(MOVIES_FEATURES) - 3
+    clusters, noise = optimised_slides_dbscan(
+        MOVIES_FEATURES, radius=50, minimum_points=100
     )
-    print("That took", time.perf_counter() - start)
+    print("That took", time.perf_counter() - start, "seconds")

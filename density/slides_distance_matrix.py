@@ -1,25 +1,15 @@
-"""
-
-"""
-import math
-import os
 import random
-import time
 
 import numpy as np
-import pandas as pd
 from sklearn.cluster import DBSCAN
 
-from useful_tools import pickle_manager
-from numba import njit
 
-
-def slides_dbscan(feature_vectors, radius: float, minimum_points: int, down_to=0):
+def distance_matrix_slides_dbscan(similarity_matrix, radius: float, minimum_points: int):
     """
     Does DBSCAN (Density Based Clustering of Applications with Noise)
     Time: O(n^2)
     Space: O(n^2) (pre-existing in similarity matrix)
-    :param feature_vectors: A lookup for distances. Should be able
+    :param similarity_matrix: A lookup for distances. Should be able
     to call similarity_matrix[a][b] to be able to find the distance
     between a and b
     :param radius: The radius of a neighbourhood
@@ -27,19 +17,17 @@ def slides_dbscan(feature_vectors, radius: float, minimum_points: int, down_to=0
     neighbourhood around a given point
     :return: (clusters: list(set), noise: set)
     """
-    # Use unordered sets so we get an O(1) add/remove
-    unvisited = set(range(len(feature_vectors)))
-    unclustered = set(range(len(feature_vectors)))
+    unvisited = set(range(len(similarity_matrix)))
+    unclustered = set(range(len(similarity_matrix)))
     clusters = list()
     noise = list()
 
-    while len(unvisited) > down_to:
-        print(len(unvisited))
+    while len(unvisited) > 0:
         point = random.sample(unvisited, 1)[0]
         unvisited.remove(point)
 
         neighbourhood = find_neighbourhood(
-            feature_vectors, point, radius, unvisited
+            similarity_matrix, point, radius, unvisited
         )
 
         # If the density is too low then its just noise
@@ -57,7 +45,7 @@ def slides_dbscan(feature_vectors, radius: float, minimum_points: int, down_to=0
 
             # if epsilon neighbourhood has at least minimum points
             inner_neighbourhood = find_neighbourhood(
-                feature_vectors, point, radius, unvisited
+                similarity_matrix, point, radius, unvisited
             )
 
             if len(inner_neighbourhood) > minimum_points:
@@ -70,26 +58,17 @@ def slides_dbscan(feature_vectors, radius: float, minimum_points: int, down_to=0
     return clusters, noise
 
 
-def find_neighbourhood(feature_vectors, point, radius, unvisited: set):
+def find_neighbourhood(similarity_matrix, point, radius, unvisited: set):
     neighbourhood = set()
     for u in unvisited:
-        if euclid_distance(feature_vectors[point], feature_vectors[u]) < radius:
+        if similarity_matrix[point][u] < radius:
             neighbourhood.add(u)
     return neighbourhood
 
 
-def euclid_distance(v1, v2):
-    # If we try to use the non-numpy version, this operation takes about 5
-    # seconds per node
-    total = 0
-    for i in range(len(v1)):
-        total += (v1[i] - v2[i]) ** 2
-    return total ** (1 / 2)
-
-
 # This is so that I can just override the fit() function
 # for easy evaluation
-class my_DBSCAN(DBSCAN):
+class sim_my_DBSCAN(DBSCAN):
     """
     Shockingly bad practice to inherit a library class,
     but I'm just going to do it so that the evaluation of my
@@ -109,7 +88,7 @@ class my_DBSCAN(DBSCAN):
         :param sample_weight:
         :return:
         """
-        (clusters, noise) = slides_dbscan(
+        (clusters, noise) = distance_matrix_slides_dbscan(
             X, self.eps, self.min_samples
         )
 
@@ -128,26 +107,3 @@ class my_DBSCAN(DBSCAN):
             self.labels_[point] = -1
 
         return self
-
-
-if __name__ == '__main__':
-    print(os.getcwd())  # This has to be in the root or it'll die
-
-    MOVIES: pd.DataFrame = pickle_manager.load_pickle(
-        'pickles/sentences.pickle.lz4'
-    )
-
-    MOVIES_FEATURES: pd.DataFrame = pickle_manager.load_pickle(
-        'pickles/sentence_features.pickle.lz4'
-    )
-    MOVIES_FEATURES: np.ndarray = \
-        MOVIES_FEATURES.reset_index().to_numpy(dtype=np.float64)
-
-    # Huh apparently we have nan. If we set to 0 then it should be fine
-    MOVIES_FEATURES[np.isnan(MOVIES_FEATURES)] = 0
-    print("Trying to do 3")
-    start = time.perf_counter()
-    clusters, noise = slides_dbscan(
-        MOVIES_FEATURES, radius=50, minimum_points=100, down_to=len(MOVIES_FEATURES) - 3
-    )
-    print("That took", time.perf_counter() - start)

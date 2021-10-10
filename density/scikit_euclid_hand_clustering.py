@@ -9,12 +9,13 @@ import time
 import numpy as np
 import pandas as pd
 from sklearn.cluster import DBSCAN
+from scipy.spatial import distance
 
 from useful_tools import pickle_manager
 from numba import njit
 
 
-def slides_dbscan(feature_vectors, radius: float, minimum_points: int, down_to=0):
+def scikit_distances_dbscan(feature_vectors, radius: float, minimum_points: int, down_to=0):
     """
     Does DBSCAN (Density Based Clustering of Applications with Noise)
     Time: O(n^2)
@@ -79,12 +80,7 @@ def find_neighbourhood(feature_vectors, point, radius, unvisited: set):
 
 
 def euclid_distance(v1, v2):
-    # If we try to use the non-numpy version, this operation takes about 5
-    # seconds per node
-    total = 0
-    for i in range(len(v1)):
-        total += (v1[i] - v2[i]) ** 2
-    return total ** (1 / 2)
+    return distance.euclidean(v1, v2)
 
 
 # This is so that I can just override the fit() function
@@ -109,7 +105,7 @@ class my_DBSCAN(DBSCAN):
         :param sample_weight:
         :return:
         """
-        (clusters, noise) = slides_dbscan(
+        (clusters, noise) = scikit_distances_dbscan(
             X, self.eps, self.min_samples
         )
 
@@ -145,9 +141,10 @@ if __name__ == '__main__':
 
     # Huh apparently we have nan. If we set to 0 then it should be fine
     MOVIES_FEATURES[np.isnan(MOVIES_FEATURES)] = 0
+
     print("Trying to do 3")
     start = time.perf_counter()
-    clusters, noise = slides_dbscan(
-        MOVIES_FEATURES, radius=50, minimum_points=100, down_to=len(MOVIES_FEATURES) - 3
+    clusters, noise = scikit_distances_dbscan(
+        MOVIES_FEATURES, radius=50, minimum_points=100, down_to=len(MOVIES_FEATURES) - 5
     )
-    print("That took", time.perf_counter() - start)
+    print("That took", time.perf_counter() - start, "seconds")
