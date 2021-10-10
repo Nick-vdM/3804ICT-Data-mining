@@ -1,16 +1,7 @@
 import itertools
-from time import perf_counter
-
-from numpy import fromregex
-from numpy.lib.function_base import insert
-from pandas.core import base
-from scipy.sparse import data
 import pickle_manager
-import pandas as pd
-import os
-from mlxtend.preprocessing import TransactionEncoder
-from mlxtend.frequent_patterns import fpgrowth
-import sys
+
+
 
 class Node:
     def __init__(self,item,parent,count = 1):
@@ -118,18 +109,13 @@ def mineTree(tree,preFix,freqItemsList,minSupport):
         newFreqSet.add(item)
         freqItemsList.append(newFreqSet)
         allPaths = tree.getAllPaths(item)
-        #print(item)
-        #print(allPaths)
         frequency = []
         condPaths = []
         for path in allPaths:
             frequency.insert(len(frequency),path[1])
             condPaths.insert(len(condPaths),path[0])
-
         #Create new tree
-        #print(condPaths, frequency)
         condTree = Tree(condPaths,frequency,minSupport)
-        #condTree.printTree(condTree.root, 0)
         if len(condTree.headerTable) > 0:
             mineTree(condTree,newFreqSet, freqItemsList, minSupport)
 
@@ -154,7 +140,7 @@ def getAssociationRules(freqItemsList, dataSet, minConfidence):
                     for itemSet in dataSet:
                         if(len(itemSet) > 0):
                             if(all(item in itemSet for item in A)):
-                                Asupport = Asupport + 1            
+                                Asupport = Asupport + 1        
                 if(Asupport > 0):
                     if(AUBsupport/Asupport > minConfidence):
                         rules.insert(0,[A,"->",B,AUBsupport/Asupport])
@@ -162,75 +148,24 @@ def getAssociationRules(freqItemsList, dataSet, minConfidence):
 
 
 df = pickle_manager.load_pickle("pickles\organised_ratings.pickle.lz4")
-results_df = pd.DataFrame(data={'col1':[], 'col2':[]})
-for y in range(50,50):
+
+for y in range(1,11):
     supportPercentage = 0.01 * y
-    print("Support Percentage", supportPercentage)
-    for x in range(0,6):
-        #print("Movie Rating: ", x)
+    for x in range(1,6):
+        print("Movie Rating: ", x)
+        print("Support Percentage", supportPercentage)
         dataSet = []
-        nElements = 0
         for i in range(1,df['userId'].max()+1):
             itemSet = []
             itemSet = df.loc[(df['rating'] == x) & (df['userId'] == i)]['imdbId'].tolist()
             dataSet.insert(0,itemSet)
-            nElements = nElements + len(itemSet)
-        #print("Number of elements: ", nElements)
+
         dataSetSize = len(dataSet)
-        print(dataSetSize)
-        start = perf_counter()
-        #print("Creating FP tree")
         frequency = [1 for i in range(len(dataSet))]
         fpTree = Tree(dataSet,frequency,supportPercentage*dataSetSize)
         freqItemsList = []
         mineTree(fpTree, set(), freqItemsList,supportPercentage*dataSetSize)
         print("Number of frequent sets:", len(freqItemsList))
         if(len(freqItemsList) > 0):
-            rules = getAssociationRules(freqItemsList, dataSet, 0.7)
-            #for rule in rules:
-                #print(rule)
-            #print("Number of rules: ", len(rules))
-        end = perf_counter()
-        #print(end - start, start, end)
-
-results_df = pd.DataFrame(data={'Datset Size':[], 'Time Taken':[]})
-for y in range(20,123):
-    supportPercentage = 0.03
-    print("Support Percentage", supportPercentage)
-    for x in range(0,6):
-        #print("Movie Rating: ", x)
-        dataSet = []
-        nElements = 0
-        for i in range(1,df['userId'].max()+1):
-            itemSet = []
-            itemSet = df.loc[(df['rating'] == x) & (df['userId'] == i)]['imdbId'].tolist()
-            dataSet.insert(0,itemSet)
-            nElements = nElements + len(itemSet)
-        #print("Number of elements: ", nElements)
-        dataSet = dataSet[0:y*5]
-        #print(dataSet)
-        dataSetSize = len(dataSet)
-        print("Datset size: ", dataSetSize)
-        start = perf_counter()
-        #print("Creating FP tree")
-        frequency = [1 for i in range(len(dataSet))]
-        fpTree = Tree(dataSet,frequency,supportPercentage*dataSetSize)
-        #fpTree.printTree(fpTree.root,0)
-        #print(fpTree.headerTable)
-        freqItemsList = []
-        mineTree(fpTree, set(), freqItemsList,supportPercentage*dataSetSize)
-        print("Number of frequent sets:", len(freqItemsList))
-        #if(len(freqItemsList) > 0):
-            #rules = getAssociationRules(freqItemsList, dataSet, 0.7)
-            #for rule in rules:
-                #print(rule)
-            #print("Number of rules: ", len(rules))
-        end = perf_counter()
-        newRow = {'Datset Size': len(dataSet), 'Time Taken': end-start}
-        results_df = results_df.append(newRow, ignore_index=True)
-        print(end - start, start, end)
-
-results_df.to_csv('Implementation.csv', index=False)
-
-
-
+            rules = getAssociationRules(freqItemsList, dataSet, 0.8)
+            print("Number of rules: ", len(rules))
